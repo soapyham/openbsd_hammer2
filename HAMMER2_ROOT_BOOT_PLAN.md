@@ -9,7 +9,7 @@ The existing `make kernel` and `make install-kernel` targets build and install `
 ## 1. Record the baseline
 
 - [x] Record the OpenBSD release and architecture, DragonFlyBSD source revision, port commit, kernel configuration, and compiler used for the test: OpenBSD 8.0 amd64, DragonFlyBSD `d37499e259`, port baseline `f4d399e`, `GENERIC.MP`, OpenBSD clang 22.1.6.
-- [ ] Run `make kernel` and confirm the HAMMER2-enabled kernel builds before modifying the root mount path.
+- [x] Build the HAMMER2-enabled `GENERIC.MP` kernel with the root mount changes. `make KERNEL_BUILD_DIR=/tmp/hammer2-root-mp-build kernel` completed on OpenBSD 8.0 amd64 and produced `/tmp/hammer2-root-mp-build/bsd`.
 - [ ] Confirm `newfs_hammer2`, `mount_hammer2`, `fsck_hammer2`, and `hammer2` build and work on a non-root test volume.
 - [ ] Capture a VM boot log with the existing FFS root and `/bsd.hammer2`.
 - [ ] Keep a known working kernel and rescue image available on the FFS boot partition.
@@ -27,7 +27,7 @@ The existing `make kernel` and `make install-kernel` targets build and install `
 
 - [x] Trace the regular mount path through `hammer2_mount()`, `hammer2_init_devvp()`, volume header loading, and PFS lookup; identify every operation that assumes a mounted root or userspace pointer.
 - [x] Refactor common volume and PFS setup so normal mounts and root mounts share validation and cleanup code. (Both now call `hammer2_mount_impl()`.)
-- [ ] Implement `hammer2_mountroot()` using the kernel-provided `rootdev` block vnode, `vfs_rootmountalloc()`, and the standard mount list/statfs handoff. Do not call pathname lookup or `copyinstr()` from this path. (Implementation compiled; full kernel and boot checks pending.)
+- [x] Implement `hammer2_mountroot()` using the kernel-provided `rootdev` block vnode, `vfs_rootmountalloc()`, and the standard mount list/statfs handoff. The root path bypasses pathname lookup and `copyinstr()`; the full MP kernel links. Boot behavior is covered by the separate runtime checks below.
 - [ ] Define how the root PFS is selected at boot. Start with a documented `ROOT` label; reject a missing or ambiguous PFS with a useful console error. Decide whether a boot-time override is needed after the first working boot.
 - [ ] Check the root vnode type, mount flags, vnode references, device open/close, and all failure cleanup against the target OpenBSD VFS conventions.
 - [ ] Confirm the mounted root is initially usable read-only and can be remounted read/write during startup.
