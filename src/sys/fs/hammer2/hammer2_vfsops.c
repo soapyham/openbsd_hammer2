@@ -40,6 +40,8 @@
 
 #include <sys/sysctl.h>
 #include <sys/specdev.h>
+#include <sys/device.h>
+#include <sys/disklabel.h>
 
 static int hammer2_unmount(struct mount *, int, struct proc *);
 static int hammer2_recovery(hammer2_dev_t *);
@@ -505,6 +507,7 @@ hammer2_mountroot(void)
 	struct hammer2_mount_info args;
 	struct mount *mp;
 	struct vnode *devvp;
+	char devpath[MNAMELEN];
 	char devname[MNAMELEN];
 	int error;
 
@@ -535,12 +538,14 @@ hammer2_mountroot(void)
 	mp->mnt_flag |= MNT_RDONLY;
 
 	/* The ROOT PFS is the fixed initial root selection policy. */
-	snprintf(devname, sizeof(devname), "%s@ROOT", mp->mnt_stat.f_mntfromname);
+	snprintf(devpath, sizeof(devpath), "/dev/%s%c", rootdv->dv_xname,
+	    DL_PARTNUM2NAME(DISKPART(rootdev)));
+	snprintf(devname, sizeof(devname), "%s@ROOT", devpath);
 	bzero(&args, sizeof(args));
 	args.fspec = devname;
 	error = hammer2_mount_impl(mp, "/", &args, NULL, curproc, devvp);
 	if (error) {
-		hprintf("root PFS ROOT mount failed: %d\n", error);
+		hprintf("root PFS %s mount failed: %d\n", devname, error);
 		vfs_unbusy(mp);
 		vfs_mount_free(mp);
 		vrele(swapdev_vp);
@@ -548,10 +553,14 @@ hammer2_mountroot(void)
 		return (error);
 	}
 	rootvp = devvp;
+	strlcpy(mp->mnt_stat.f_mntfromname, devpath,
+	    sizeof(mp->mnt_stat.f_mntfromname));
 	hprintf("root PFS %s mounted read-only\n",
-	    mp->mnt_stat.f_mntfromname);
+	    mp->mnt_stat.f_mntfromspec);
 	TAILQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	vfs_unbusy(mp);
+	inittodr((time_t)(MAX(MPTOPMP(mp)->iroot->meta.mtime,
+	    MPTOPMP(mp)->iroot->meta.btime) / 1000000));
 	return (0);
 }
 

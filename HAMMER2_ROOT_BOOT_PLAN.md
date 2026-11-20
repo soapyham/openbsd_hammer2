@@ -4,21 +4,21 @@
 
 Boot an OpenBSD kernel with HAMMER2 support from an FFS boot partition, mount a HAMMER2 PFS as `/`, reach a login prompt, and survive clean and interrupted reboots. Keep the initial bootloader and kernel image on FFS so this work can focus on the kernel root mount path. Use a disposable VM and disk image until the acceptance checks pass.
 
-The existing `make kernel` and `make install-kernel` targets build and install `/bsd.hammer2`. The default kernel configuration is `GENERIC.MP`, with a separate `.obj/kernel/${MACHINE}.MP` build directory. They do not make a HAMMER2 root bootable yet. The current `dk_mountroot()` selects FFS, ext2fs, or cd9660 from the disklabel filesystem type; HAMMER2 has no root mount entry point. Normal `hammer2_mount()` needs userspace mount arguments and a pathname lookup, which are unavailable during early root mounting.
+The `make kernel` and `make install-kernel` targets build and install `/bsd.hammer2`. The default kernel configuration is `GENERIC.MP`, with a separate `.obj/kernel/${MACHINE}.MP` build directory. This plan tracks the root mount implementation and VM validation; the initial `dk_mountroot()` and `hammer2_mount()` limitations have been addressed in the development tree.
 
 ## 1. Record the baseline
 
 - [x] Record the OpenBSD release and architecture, DragonFlyBSD source revision, port commit, kernel configuration, and compiler used for the test: OpenBSD 8.0 amd64, DragonFlyBSD `d37499e259`, port baseline `f4d399e`, `GENERIC.MP`, OpenBSD clang 22.1.6.
 - [x] Build the HAMMER2-enabled `GENERIC.MP` kernel with the root mount changes. `make KERNEL_BUILD_DIR=/tmp/hammer2-root-mp-build kernel` completed on OpenBSD 8.0 amd64 and produced `/tmp/hammer2-root-mp-build/bsd`.
 - [ ] Confirm `newfs_hammer2`, `mount_hammer2`, `fsck_hammer2`, and `hammer2` build and work on a non-root test volume.
-- The four userspace tools build with `make -s` on the target host. A non-root volume test is still pending.
+- The four userspace tools build with `make -s` on the target host. `newfs_hammer2` formatted `/dev/rsd1a`, and `mount_hammer2` mounted `/dev/sd1a@ROOT` as a non-root volume in the VM. `fsck_hammer2` and other `hammer2` commands still need runtime checks.
 - [ ] Capture a VM boot log with the existing FFS root and `/bsd.hammer2`.
 - [ ] Keep a known working kernel and rescue image available on the FFS boot partition.
 
 ## 2. Identify HAMMER2 as a root filesystem
 
 - [x] Choose an unused disklabel filesystem type number after checking the target OpenBSD source tree: `FS_HAMMER2 = 22` follows `FS_UDF = 21` in OpenBSD 8.0. Recheck this number when rebasing to another release.
-- [ ] Add `FS_HAMMER2` and its display name in `/usr/src/sys/sys/disklabel.h`; verify disklabel tools can set and show that type. (Definition and names added; userland disklabel verification pending.)
+- [x] Add `FS_HAMMER2` and its display name in `/usr/src/sys/sys/disklabel.h`; verify disklabel tools can set and show that type. A `disklabel` built against the patched header set and displayed `HAMMER2` on VM `sd1a`.
 - [x] Add a HAMMER2 case to `dk_mountroot()` in `/usr/src/sys/kern/subr_disk.c`, guarded by the HAMMER2 kernel option, that calls `hammer2_mountroot()`.
 - [x] Add the required function declaration and kernel configuration dependencies. (`GENERIC.MP` includes `GENERIC`, which enables HAMMER2.)
 - [ ] Carry all changes to the OpenBSD base tree in `patch/openbsd80.patch` (or the repository's documented patch mechanism), then confirm `make prep` applies them to a clean matching tree.
@@ -32,29 +32,29 @@ The existing `make kernel` and `make install-kernel` targets build and install `
 - [ ] Define how the root PFS is selected at boot. Start with a documented `ROOT` label; reject a missing or ambiguous PFS with a useful console error. Decide whether a boot-time override is needed after the first working boot.
 - The initial root selection is the `ROOT` PFS on the selected HAMMER2 root partition. The kernel mounts it read-only and prints the selected source on success. A missing `ROOT` label fails with `ENOENT`; duplicate-label handling and a boot-time override remain to be decided after VM testing.
 - [ ] Check the root vnode type, mount flags, vnode references, device open/close, and all failure cleanup against the target OpenBSD VFS conventions.
-- The root path now rejects a non-block vnode, starts read-only, and releases device vnode references on both pre-open and post-open cleanup paths. A fresh `make KERNEL_BUILD_DIR=/tmp/hammer2-root-mp-build kernel` completed and linked `/tmp/hammer2-root-mp-build/bsd`; runtime verification remains pending.
-- [ ] Confirm the mounted root is initially usable read-only and can be remounted read/write during startup.
-- `mount_hammer2` now accepts both `-u node` and the `-o update special node` form used by OpenBSD `mount(8)`; its rebuild passed. Update failures also print a valid source name when no special argument was supplied. Root remount behavior still needs a VM boot test.
+- The root path rejects a non-block vnode, starts read-only, and releases device vnode references on both pre-open and post-open cleanup paths. The VM booted and survived clean and forced reboots; exceptional cleanup paths still need fault testing.
+- [x] Confirm the mounted root is initially usable read-only and can be remounted read/write during startup. The console reported the initial read-only mount, startup remounted it, and `mount -u /` plus file writes succeeded.
+- `mount_hammer2` accepts both `-u node` and the `-o update special node` form used by OpenBSD `mount(8)`; its rebuild and VM remount passed. Update failures print a valid source name when no special argument was supplied.
 - [ ] Ensure kernel diagnostics identify the device, selected PFS, and failure stage without exposing misleading success messages.
 
 ## 4. Prepare a disposable boot image
 
-- [ ] Create a VM disk with an OpenBSD disklabel and separate FFS boot and HAMMER2 root partitions; record the exact partition letters and device names used.
+- [x] Create disposable VM disks with separate FFS boot and HAMMER2 root storage: `/tmp/hammer2-root-test.img` is `sd0` (6 GiB, FFS `sd0a`, swap `sd0b`); `/tmp/hammer2-pfs-test.img` is `sd1` (4 GiB, HAMMER2 `sd1a`, type 22, offset 64 sectors).
 - [ ] Install boot blocks, `/boot`, `/bsd.hammer2`, `/bsd.rd`, and a known working kernel on the FFS partition.
-- [ ] Format the HAMMER2 partition and create the `ROOT` PFS using the port's tools.
-- [ ] Populate `ROOT` with a complete matching OpenBSD base system, including `/sbin/init`, `/bin/ksh`, required shared libraries, `/etc`, and device nodes.
-- [ ] Create a minimal `/etc/fstab` for the HAMMER2 root and any separate boot/swap partitions. Check how `mount`, `mount -u /`, and boot-time filesystem checks handle the new root type.
+- [x] Format the HAMMER2 partition and create the `ROOT` PFS using the port's tools (`newfs_hammer2 -s 3G -L ROOT /dev/rsd1a`). The explicit 3 GiB size avoids the formatter rounding the 4 GiB disk beyond its partition end.
+- [x] Populate `ROOT` with the matching OpenBSD 8.0 `base80.tgz`, copy the installed `/etc` and `/var`, run `MAKEDEV all`, and install `mount_hammer2` and `fsck_hammer2` in `/sbin`. The VM reached login from this root.
+- [x] Create a minimal `/etc/fstab` for the HAMMER2 root and swap. `mount`, `mount -u /`, and startup checks completed in the VM.
 - [ ] Keep a way to select the FFS rescue kernel/root at the boot prompt. Do not change the host's default boot configuration during development.
 
 ## 5. Boot and validate in stages
 
-- [ ] Boot `/bsd.hammer2` with `-a` and explicitly select the HAMMER2 root partition.
-- [ ] Confirm disklabel detection dispatches to `hammer2_mountroot()` and that the intended `ROOT` PFS becomes `/`.
-- [ ] Confirm `/sbin/init` starts, startup scripts complete, and a login prompt appears on the VM console.
+- [x] Boot `/bsd.hammer2` with `-a` and explicitly select `sd1a` root and `sd0b` swap.
+- [x] Confirm disklabel detection dispatches to `hammer2_mountroot()` and that the intended `ROOT` PFS becomes `/`. The console reported `/dev/sd1a@ROOT`, and `mount` showed `/dev/sd1a on / type hammer2`.
+- [x] Confirm `/sbin/init` starts, startup scripts complete, and a login prompt appears on the VM console.
 - [ ] Check `mount`, `df`, `stat`, file creation, rename, unlink, directory traversal, and permissions on `/`.
-- [ ] Confirm the root remounts read/write, changes persist after `sync` and reboot, and clean shutdown works.
+- [x] Confirm the root remounts read/write, changes persist after `sync` and reboot, and clean shutdown works. `/root/h2-root-probe` survived multiple clean reboots.
 - [ ] Test several cold boots and clean reboots. Compare on-disk data and inspect console logs for HAMMER2 errors or leaks.
-- [ ] Test an interrupted VM boot or forced power-off on a disposable image; verify recovery and document any repair procedure.
+- [x] Force-stop the disposable VM after writing `/root/interrupted-probe`, then cold boot it. The root mounted and reached login; both the new file and earlier data were readable without repair. This is one recovery sample, not a general durability guarantee.
 - [ ] Test missing `ROOT` PFS, invalid HAMMER2 header, and wrong disklabel type. Each should fail clearly without mounting the wrong volume.
 - [ ] Confirm the FFS rescue path and `/bsd.rd` remain bootable.
 - [ ] Run focused regression checks for ordinary HAMMER2 mounts and the userspace tools after root-mount changes.
@@ -68,11 +68,40 @@ The existing `make kernel` and `make install-kernel` targets build and install `
 
 ## Acceptance criteria
 
-- [ ] A fresh disposable VM image boots `/bsd.hammer2` from FFS and mounts HAMMER2 `ROOT` as `/`.
-- [ ] It reaches a login prompt, mounts `/` read/write, and persists changes across clean reboots.
-- [ ] It recovers from the tested interrupted reboot, or the remaining recovery limitation is documented before any real installation.
+- [x] A fresh disposable VM image boots `/bsd.hammer2` from FFS and mounts HAMMER2 `ROOT` as `/`.
+- [x] It reaches a login prompt, mounts `/` read/write, and persists changes across clean reboots.
+- [x] It recovers from the tested forced power-off without repair; broader failure testing remains open.
 - [ ] Missing or invalid root media fails with a clear diagnostic, and the FFS rescue path works.
 - [ ] The build, image creation, and boot procedure can be repeated from the documented commands.
+
+## VM run on 2026-11-20
+
+The test used OpenBSD `vmd` with two sparse raw images in `/tmp`. On the host, start `vmd`, create a 6 GiB FFS disk and a 4 GiB HAMMER2 disk with `vmctl create -s`, then start the VM with `vmctl start -d /tmp/hammer2-root-test.img -d /tmp/hammer2-pfs-test.img -m 2G -L hammer2-root-test`. The first disk was installed from the OpenBSD 8.0 `bsd` and `base80.tgz` sets using `/bsd.rd`; `/bsd` remains the FFS rescue kernel. Set `tty com0` in the FFS `/etc/boot.conf` and enable the `console` getty in `/etc/ttys` for `vmctl console` access. Place the built kernel at `/bsd.hammer2` on FFS. The tested FFS boot configuration is:
+
+```
+set tty com0
+boot /bsd.hammer2 -a
+```
+
+The stock release `disklabel` tool does not know type 22. Build `disklabel` from the matching OpenBSD source with the patched `/usr/src/sys/sys/disklabel.h`, then set `sd1a` to type `HAMMER2`, offset 64 sectors, and the remaining disk space. In the guest, use:
+
+```
+newfs_hammer2 -s 3G -L ROOT /dev/rsd1a
+mount_hammer2 /dev/sd1a@ROOT /mnt/h2
+tar -xzpf /usr/base80.tgz -C /mnt/h2
+cp -Rp /etc/. /mnt/h2/etc/
+cp -Rp /var/. /mnt/h2/var/
+cd /mnt/h2/dev && ./MAKEDEV all
+```
+
+Copy the built `mount_hammer2` and `fsck_hammer2` to `/mnt/h2/sbin`. Copying `/var` can report errors for live Unix sockets; those sockets are recreated at boot. The HAMMER2 root's `/etc/fstab` contains:
+
+```
+319b6f97787efae6.b none swap sw
+/dev/sd1a@ROOT / hammer2 rw 1 0
+```
+
+Unmount `/mnt/h2`, boot `/bsd.hammer2 -a`, answer `sd1a` for root and `sd0b` for swap. The last tested kernel initialized time from the RTC, reported `/dev/sd1a@ROOT mounted read-only`, completed startup, and reached login without HAMMER2 errors. `dev_mkdb` succeeded after advisory locking support was added. `reorder_kernel` still reports failure because this development kernel has no matching relink set; investigate separately. The VM was shut down cleanly, and both disposable images remain in `/tmp` for further tests. The FFS image does not yet contain `/bsd.rd`; use the host's `/bsd.rd` with `vmctl start -b` for rescue testing.
 
 ## Key code locations
 

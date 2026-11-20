@@ -45,6 +45,7 @@
 #include <sys/unistd.h>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/lockf.h>
 #include <sys/specdev.h>
 
 #include <miscfs/fifofs/fifo.h>
@@ -55,6 +56,16 @@ static void hammer2_extend_file(hammer2_inode_t *, hammer2_key_t);
 #ifdef DIAGNOSTIC
 extern int prtactive;
 #endif
+
+static int
+hammer2_advlock(void *v)
+{
+	struct vop_advlock_args *ap = v;
+	hammer2_inode_t *ip = VTOI(ap->a_vp);
+
+	return (lf_advlock(&ip->lockf, ip->meta.size, ap->a_id, ap->a_op,
+	    ap->a_fl, ap->a_flags));
+}
 
 static int
 hammer2_inactive(void *v)
@@ -141,6 +152,7 @@ hammer2_reclaim(void *v)
 
 	/* Purge old data structures associated with the inode. */
 	cache_purge(vp);
+	lf_purgelocks(&ip->lockf);
 
 	hmp = ip->pmp->pfs_hmps[0];
 	KASSERT(hmp);
@@ -2842,7 +2854,7 @@ const struct vops hammer2_vops = {
 	.vop_print	= hammer2_print,
 	.vop_islocked	= hammer2_islocked,
 	.vop_pathconf	= hammer2_pathconf,
-	.vop_advlock	= eopnotsupp,
+	.vop_advlock	= hammer2_advlock,
 	.vop_bwrite	= vop_generic_bwrite,
 };
 
