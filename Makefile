@@ -10,10 +10,10 @@ clean:
 		$(MAKE) -C $$dir $@; \
 	done
 install:
-	sudo bash -x ./script/install.sh
+	@if [ "$$(id -u)" -eq 0 ]; then ksh -x ./script/install.sh; else doas ksh -x ./script/install.sh; fi
 uninstall:
-	sudo bash -x ./script/uninstall.sh
+	@if [ "$$(id -u)" -eq 0 ]; then ksh -x ./script/uninstall.sh; else doas ksh -x ./script/uninstall.sh; fi
 prep:
-	sudo bash -x ./script/prep.sh
+	@if [ "$$(id -u)" -eq 0 ]; then ksh -x ./script/prep.sh; else doas ksh -x ./script/prep.sh; fi
 unprep:
-	sudo bash -x ./script/unprep.sh
+	@if [ "$$(id -u)" -eq 0 ]; then ksh -x ./script/unprep.sh; else doas ksh -x ./script/unprep.sh; fi
