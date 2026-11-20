@@ -280,7 +280,7 @@ hammer2_getattr(void *v)
 	vap->va_nlink = ip->meta.nlinks;
 	vap->va_uid = hammer2_inode_to_uid(ip);
 	vap->va_gid = hammer2_inode_to_gid(ip);
-	vap->va_rdev = NODEV;
+	vap->va_rdev = makedev(ip->meta.rmajor, ip->meta.rminor);
 	vap->va_size = ip->meta.size;
 	vap->va_flags = ip->meta.uflags;
 	hammer2_time_to_timespec(ip->meta.ctime, &vap->va_ctime);
