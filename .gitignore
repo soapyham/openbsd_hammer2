@@ -1,5 +1,6 @@
 *.o
 *.d
+/.obj/
 
 /src/sbin/hammer2/hammer2
 /src/sbin/newfs_hammer2/newfs_hammer2
