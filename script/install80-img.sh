@@ -3,20 +3,25 @@
 set -eu
 
 usage() {
-	echo "usage: $0 output.img [base-install80.img] [hammer2-kernel]" >&2
+	echo "usage: $0 output.img [base-install80.img] [hammer2-kernel] [ramdisk-kernel]" >&2
 	exit 1
 }
 
-[ "$#" -ge 1 ] && [ "$#" -le 3 ] || usage
+[ "$#" -ge 1 ] && [ "$#" -le 4 ] || usage
 [ "$(id -u)" -eq 0 ] || { echo 'image assembly requires root' >&2; exit 1; }
 
 output=$1
 base=${2:-}
 kernel=${3:-.obj/kernel/amd64.MP/bsd}
+ramdisk_kernel=${4:-.obj/kernel/amd64.RAMDISK.HAMMER2/bsd}
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 case "$output" in /*) ;; *) output="$(pwd)/$output" ;; esac
 case "$kernel" in /*) ;; *) kernel="$(pwd)/$kernel" ;; esac
+case "$ramdisk_kernel" in /*) ;; *) ramdisk_kernel="$(pwd)/$ramdisk_kernel" ;; esac
 [ -f "$kernel" ] || { echo "missing kernel: $kernel" >&2; exit 1; }
+[ -f "$ramdisk_kernel" ] || {
+	echo "missing ramdisk kernel: $ramdisk_kernel" >&2; exit 1;
+}
 [ -f /usr/src/sbin/disklabel/Makefile ] &&
     grep -q FS_HAMMER2 /usr/src/sys/sys/disklabel.h || {
 	echo 'patched OpenBSD disklabel sources are required; run make prep' >&2; exit 1;
@@ -30,11 +35,15 @@ done
 work=$(mktemp -d /tmp/hammer2-install80.XXXXXXXX)
 srcvnd=
 dstvnd=
+rdvnd=
 srcmounted=no
 dstmounted=no
+rdmounted=no
 cleanup() {
+	if [ "$rdmounted" = yes ]; then umount "$work/stock-mr" || :; fi
 	if [ "$dstmounted" = yes ]; then umount "$work/dst" || :; fi
 	if [ "$srcmounted" = yes ]; then umount "$work/src" || :; fi
+	if [ -n "$rdvnd" ]; then vnconfig -u "$rdvnd" || :; fi
 	if [ -n "$dstvnd" ]; then vnconfig -u "$dstvnd" || :; fi
 	if [ -n "$srcvnd" ]; then vnconfig -u "$srcvnd" || :; fi
 	rm -rf "$work"
@@ -78,6 +87,21 @@ dstmounted=yes
 
 payload="$work/dst/8.0/amd64"
 mkdir -p "$payload/hammer2-tools"
+
+# Expand the release installer ramdisk and add HAMMER2 support without
+# rebuilding OpenBSD's crunched installer binary.
+gzip -dc "$work/src/8.0/amd64/bsd.rd" > "$work/stock-bsd.rd"
+rdsetroot -x "$work/stock-bsd.rd" "$work/stock-mr.fs"
+mkdir "$work/stock-mr" "$work/custom-mr"
+rdvnd=$(vnconfig -v "$work/stock-mr.fs" | tail -1)
+mount -r "/dev/${rdvnd}a" "$work/stock-mr"
+rdmounted=yes
+(cd "$work/stock-mr" && pax -rw -pe . "$work/custom-mr")
+umount "$work/stock-mr"
+rdmounted=no
+vnconfig -u "$rdvnd"
+rdvnd=
+
 install -m 555 "$kernel" "$work/dst/bsd.hammer2"
 install -m 555 "$kernel" "$payload/bsd.hammer2"
 for tool in hammer2 newfs_hammer2 mount_hammer2 fsck_hammer2; do
@@ -102,37 +126,87 @@ cp /usr/src/sbin/disklabel/Makefile /usr/src/sbin/disklabel/*.[ch] \
 make -s -C "$work/disklabel" NOMAN=1 CFLAGS=-I/usr/src/sys
 install -m 555 "$work/disklabel/disklabel" "$work/dst/sbin/disklabel"
 install -m 555 "$work/disklabel/disklabel" "$payload/hammer2-tools/disklabel"
+rm "$work/custom-mr/sbin/disklabel"
+install -m 555 "$work/disklabel/disklabel" "$work/custom-mr/sbin/disklabel"
 for binary in "$work/disklabel/disklabel" \
     "$repo/src/sbin/hammer2/hammer2" \
     "$repo/src/sbin/newfs_hammer2/newfs_hammer2" \
     "$repo/src/sbin/mount_hammer2/mount_hammer2" \
     "$repo/src/sbin/fsck_hammer2/fsck_hammer2"; do
 	install -m 555 "$binary" "$work/dst/sbin/$(basename "$binary")"
+	if [ "$binary" != "$work/disklabel/disklabel" ]; then
+		install -m 555 "$binary" "$work/custom-mr/sbin/$(basename "$binary")"
+	fi
 	ldd "$binary" | awk '$NF ~ /^\/usr\// { print $NF }' |
 	while IFS= read -r library; do
 		[ -f "$work/dst$library" ] || install -m 444 "$library" "$work/dst$library"
+		mkdir -p "$work/custom-mr$(dirname "$library")"
+		[ -f "$work/custom-mr$library" ] ||
+		    install -m 444 "$library" "$work/custom-mr$library"
 	done
 done
+
+makefs -s 24m -o rdroot,minfree=0,density=4096,bsize=4096,fsize=512 \
+    "$work/custom-mr.fs" "$work/custom-mr"
+# makefs's generic rdroot label omits geometry needed by vnd; write a
+# complete label so the image is mountable for inspection and by rd(4).
+cat > "$work/ramdisk.label" <<'EOF'
+type: vnd
+disk: rdroot
+label: HAMMER2 ramdisk
+bytes/sector: 512
+sectors/track: 100
+tracks/cylinder: 1
+sectors/cylinder: 100
+cylinders: 492
+total sectors: 49152
+boundstart: 0
+boundend: 49152
+16 partitions:
+  a: 49152 0 4.2BSD 512 4096 0
+EOF
+rdvnd=$(vnconfig -v "$work/custom-mr.fs" | tail -1)
+disklabel -R "$rdvnd" "$work/ramdisk.label"
+vnconfig -u "$rdvnd"
+rdvnd=
+[ "$(stat -f %z "$work/custom-mr.fs")" -eq "$(rdsetroot -s "$ramdisk_kernel")" ] || {
+	echo 'custom ramdisk size differs from kernel reservation' >&2; exit 1;
+}
+cp "$ramdisk_kernel" "$work/bsd.rd"
+rdsetroot "$work/bsd.rd" "$work/custom-mr.fs"
+objcopy -g -x -R .comment -R .SUNW_ctf -K rd_root_size -K rd_root_image \
+    "$work/bsd.rd" "$work/bsd.strip"
+gzip -9cn "$work/bsd.strip" > "$work/bsd.rd.gz"
+rm "$work/dst/bsd" "$work/dst/bsd.rd"
+install -m 555 "$work/bsd.rd.gz" "$work/dst/bsd.rd"
+ln "$work/dst/bsd.rd" "$work/dst/bsd"
+install -m 555 "$work/bsd.rd.gz" "$payload/bsd.rd.hammer2"
 cp /dev/MAKEDEV "$work/dst/dev/MAKEDEV"
 (cd "$work/dst/dev" && sh ./MAKEDEV std sd0 sd1 sd2)
 cp /etc/ttys "$work/dst/etc/ttys"
 cat > "$work/dst/etc/boot.conf" <<'EOF'
-boot /bsd.hammer2 -s
+set image /bsd.rd
 EOF
 cat > "$payload/hammer2-tools/README" <<'EOF'
 HAMMER2 tools for OpenBSD 8.0 amd64
 
-The image boots /bsd.hammer2 in single-user mode from its FFS partition.
+The image boots its custom HAMMER2-enabled bsd.rd installer by default.
+Choose (S)hell to use disklabel and the HAMMER2 tools in the ramdisk.
+Create target device nodes with "cd /dev && sh MAKEDEV sd1" as needed.
+The full /bsd.hammer2 kernel remains available with "boot /bsd.hammer2 -s"
+at the boot prompt.
 At the shell, use disklabel to assign HAMMER2 to the intended partition,
 then run newfs_hammer2 on its raw device. The four HAMMER2 utilities are in
 /sbin and also in 8.0/amd64/hammer2-tools. The same kernel is copied to
 8.0/amd64/bsd.hammer2 for installation on an FFS boot partition.
-To create mount points on the image, remount it writable with
-"mount -u -o rw /dev/sd0a /" (adjust the device if needed).
+The ramdisk root is writable; mount points can be created under /mnt.
+When using the full kernel single-user shell, remount the image writable
+with "mount -u -o rw /dev/sd0a /" (adjust the device if needed).
 
-The stock installer is available with "boot /bsd.rd" at the boot prompt.
-Its ramdisk cannot mount HAMMER2. Populate the ROOT PFS with the OpenBSD base
-set after formatting the partition.
+The unmodified release installer remains at /8.0/amd64/bsd.rd, and the
+custom installer is also at /8.0/amd64/bsd.rd.hammer2. The stock ramdisk
+cannot mount HAMMER2. The normal (I)nstall workflow does not yet offer a
+HAMMER2 root choice; use the shell to prepare ROOT.
 See HAMMER2_ROOT_BOOT_PLAN.md in the source repository for the tested VM path.
 EOF
 
