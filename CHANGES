@@ -1,5 +1,8 @@
 Unreleased
 ==========
+- Sync applicable DragonFlyBSD userspace updates through d37499e259:
+  improve fsck error traces, reject duplicate newfs labels, improve
+  recovery hashing, and support a chainspec argument for hammer2 show.
 - Sync applicable HAMMER2 kernel fixes from DragonFlyBSD through
   d37499e259 (2026-11-20): chain last-drop NULL dereference, freemap
   modification error handling, quiet unmount, and device numbers in stat.

@@ -287,11 +287,11 @@ main(int ac, char **av)
 		 * Raw dump of filesystem.  Use -v to check all crc's, and
 		 * -vv to dump bulk file data.
 		 */
-		if (ac != 2) {
+		if (ac != 2 && ac != 3) {
 			fprintf(stderr, "show: requires device path\n");
 			usage(1);
 		} else {
-			cmd_show(av[1], 0);
+			ecode = cmd_show(av[1], ac == 3 ? av[2] : NULL, 0);
 		}
 	} else if (strcmp(av[0], "freemap") == 0) {
 		/*
@@ -302,7 +302,7 @@ main(int ac, char **av)
 			fprintf(stderr, "freemap: requires device path\n");
 			usage(1);
 		} else {
-			cmd_show(av[1], 1);
+			ecode = cmd_show(av[1], NULL, 1);
 		}
 	} else if (strcmp(av[0], "volhdr") == 0) {
 		/*
@@ -312,7 +312,7 @@ main(int ac, char **av)
 			fprintf(stderr, "volhdr: requires device path\n");
 			usage(1);
 		} else {
-			cmd_show(av[1], 2);
+			ecode = cmd_show(av[1], NULL, 2);
 		}
 	} else if (strcmp(av[0], "volume-list") == 0) {
 		/*
@@ -454,7 +454,7 @@ usage(int code)
 			"Return inode quota & config\n"
 		"    growfs [<path>...]                "
 			"Grow a filesystem into resized partition\n"
-		"    show <devpath>                    "
+		"    show <devpath> [chainspec]        "
 			"Raw hammer2 media dump for topology\n"
 		"    freemap <devpath>                 "
 			"Raw hammer2 media dump for freemap\n"

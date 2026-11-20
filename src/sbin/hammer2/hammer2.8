@@ -406,10 +406,14 @@ Snapshot without filesystem sync.
 Print the inode statistics, compression, and other meta-data associated
 with a list of paths.
 .\" ==== show ====
-.It Cm show Ar devpath
+.It Cm show Ar devpath Op Ar chainspec
 Dump the radix tree for the HAMMER2 filesystem by scanning a
 block device directly.
 No mount is required.
+If a chainspec is given, dump only the specified block.
+The chainspec is a hexadecimal media offset with embedded block size,
+followed by a dot and a two-digit hexadecimal block type, for example
+.Dq 000001559a68900a.01 .
 .\" ==== freemap ====
 .It Cm freemap Ar devpath
 Dump the freemap tree for the HAMMER2 filesystem by scanning a
