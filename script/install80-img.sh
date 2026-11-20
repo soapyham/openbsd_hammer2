@@ -17,6 +17,10 @@ repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 case "$output" in /*) ;; *) output="$(pwd)/$output" ;; esac
 case "$kernel" in /*) ;; *) kernel="$(pwd)/$kernel" ;; esac
 [ -f "$kernel" ] || { echo "missing kernel: $kernel" >&2; exit 1; }
+[ -f /usr/src/sbin/disklabel/Makefile ] &&
+    grep -q FS_HAMMER2 /usr/src/sys/sys/disklabel.h || {
+	echo 'patched OpenBSD disklabel sources are required; run make prep' >&2; exit 1;
+}
 for tool in hammer2 newfs_hammer2 mount_hammer2 fsck_hammer2; do
 	[ -x "$repo/src/sbin/$tool/$tool" ] || {
 		echo "missing $tool; run make first" >&2; exit 1;
@@ -79,18 +83,56 @@ install -m 555 "$kernel" "$payload/bsd.hammer2"
 for tool in hammer2 newfs_hammer2 mount_hammer2 fsck_hammer2; do
 	install -m 555 "$repo/src/sbin/$tool/$tool" "$payload/hammer2-tools/$tool"
 done
+
+# Boot the full HAMMER2 kernel against the install image's FFS partition.
+# A small single-user root gives it a shell and the tools needed to prepare
+# another disk. The stock ramdisk installer remains selectable as bsd.rd.
+mkdir -p "$work/dst/bin" "$work/dst/sbin" "$work/dst/dev" \
+    "$work/dst/usr/lib" "$work/dst/usr/libexec" "$work/dst/tmp"
+chmod 1777 "$work/dst/tmp"
+for binary in /bin/ksh /bin/ls /bin/mkdir /bin/cp /bin/pax \
+    /sbin/init /sbin/fdisk /sbin/mount /sbin/umount \
+    /sbin/reboot /sbin/newfs /sbin/mount_ffs /sbin/fsck_ffs; do
+	install -m 555 "$binary" "$work/dst$binary"
+done
+ln -s ksh "$work/dst/bin/sh"
+mkdir "$work/disklabel"
+cp /usr/src/sbin/disklabel/Makefile /usr/src/sbin/disklabel/*.[ch] \
+    "$work/disklabel/"
+make -s -C "$work/disklabel" NOMAN=1 CFLAGS=-I/usr/src/sys
+install -m 555 "$work/disklabel/disklabel" "$work/dst/sbin/disklabel"
+install -m 555 "$work/disklabel/disklabel" "$payload/hammer2-tools/disklabel"
+for binary in "$work/disklabel/disklabel" \
+    "$repo/src/sbin/hammer2/hammer2" \
+    "$repo/src/sbin/newfs_hammer2/newfs_hammer2" \
+    "$repo/src/sbin/mount_hammer2/mount_hammer2" \
+    "$repo/src/sbin/fsck_hammer2/fsck_hammer2"; do
+	install -m 555 "$binary" "$work/dst/sbin/$(basename "$binary")"
+	ldd "$binary" | awk '$NF ~ /^\/usr\// { print $NF }' |
+	while IFS= read -r library; do
+		[ -f "$work/dst$library" ] || install -m 444 "$library" "$work/dst$library"
+	done
+done
+cp /dev/MAKEDEV "$work/dst/dev/MAKEDEV"
+(cd "$work/dst/dev" && sh ./MAKEDEV std sd0 sd1 sd2)
+cp /etc/ttys "$work/dst/etc/ttys"
+cat > "$work/dst/etc/boot.conf" <<'EOF'
+boot /bsd.hammer2 -s
+EOF
 cat > "$payload/hammer2-tools/README" <<'EOF'
 HAMMER2 tools for OpenBSD 8.0 amd64
 
-The installer boots the stock bsd.rd. The HAMMER2-enabled GENERIC.MP kernel
-is /bsd.hammer2 and 8.0/amd64/bsd.hammer2. Its four filesystem utilities are
-in 8.0/amd64/hammer2-tools. Copy the kernel to the installed FFS boot
-partition and the utilities to the installed system (/sbin for mount_hammer2
-and fsck_hammer2, /sbin or /usr/sbin for newfs_hammer2 and hammer2).
+The image boots /bsd.hammer2 in single-user mode from its FFS partition.
+At the shell, use disklabel to assign HAMMER2 to the intended partition,
+then run newfs_hammer2 on its raw device. The four HAMMER2 utilities are in
+/sbin and also in 8.0/amd64/hammer2-tools. The same kernel is copied to
+8.0/amd64/bsd.hammer2 for installation on an FFS boot partition.
+To create mount points on the image, remount it writable with
+"mount -u -o rw /dev/sd0a /" (adjust the device if needed).
 
-The stock bsd.rd cannot mount HAMMER2. To install a HAMMER2 root filesystem,
-boot a system with the HAMMER2-enabled kernel, create a partition with fstype
-22, run newfs_hammer2, and populate the ROOT PFS with the OpenBSD base set.
+The stock installer is available with "boot /bsd.rd" at the boot prompt.
+Its ramdisk cannot mount HAMMER2. Populate the ROOT PFS with the OpenBSD base
+set after formatting the partition.
 See HAMMER2_ROOT_BOOT_PLAN.md in the source repository for the tested VM path.
 EOF
 

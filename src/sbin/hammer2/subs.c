@@ -338,7 +338,17 @@ check_volume(int fd)
 		 * can be as small as HAMMER2_LOGSIZE (16KB).
 		 */
 		int media_blksize = dl.d_secsize;
-		size = (hammer2_off_t)dl.d_secperunit * media_blksize;
+		int part;
+
+		if (fstat(fd, &st) < 0)
+			err(1, "Unable to stat fd %d", fd);
+		if (!S_ISCHR(st.st_mode) && !S_ISBLK(st.st_mode))
+			errx(1, "Unsupported file type for fd %d", fd);
+		part = DISKPART(st.st_rdev);
+		if (part >= dl.d_npartitions)
+			errx(1, "Partition %d is outside disklabel", part);
+		size = (hammer2_off_t)DL_GETPSIZE(&dl.d_partitions[part]) *
+		    media_blksize;
 		if (media_blksize > HAMMER2_PBUFSIZE ||
 		    HAMMER2_PBUFSIZE % media_blksize) {
 			errx(1, "A media sector size of %d is not supported",

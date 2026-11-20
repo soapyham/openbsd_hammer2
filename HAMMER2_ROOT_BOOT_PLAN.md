@@ -80,18 +80,25 @@ Build a modified OpenBSD 8.0 amd64 installer with `make install80.img`. The
 target builds the HAMMER2 `GENERIC.MP` kernel and four userspace tools, fetches
 and verifies the official `install80.img` if needed, and writes an expanded
 `install80.img` in the repository root. Set `INSTALL80_BASE=/path/to/install80.img`
-to reuse an existing release image. The output retains the stock `bsd.rd` boot
-path and release sets, adds `/bsd.hammer2` and
+to reuse an existing release image. The output boots `/bsd.hammer2 -s` from
+its FFS partition, with a shell, patched `disklabel`, HAMMER2 tools, and their
+required libraries. The stock installer remains available by entering
+`boot /bsd.rd` at the boot prompt. The image retains the release sets, adds
+`/bsd.hammer2` and
 `/8.0/amd64/bsd.hammer2`, and puts `hammer2`, `newfs_hammer2`,
 `mount_hammer2`, and `fsck_hammer2` under `/8.0/amd64/hammer2-tools/`.
-The stock installer ramdisk has no HAMMER2 support; use the bundled kernel and
-tools from an installed system when preparing a HAMMER2 root. The image is
+The stock installer ramdisk has no HAMMER2 support. The image is
 about 928 MiB and needs root access to assemble its boot partitions.
 
 On 2026-11-20, `make KERNEL_BUILD_DIR=/tmp/hammer2-root-mp-build
 INSTALL80_BASE=/tmp/install80.orig.img install80.img` completed. The image
-contained the matching HAMMER2 kernel and all four tools; `vmd` booted it to
-the OpenBSD 8.0 installer prompt.
+contained the matching HAMMER2 kernel and all four tools. In `vmd`, it booted
+to the custom kernel's single-user shell with a blank second disk as `sd1`.
+The tested sequence was `disklabel -E sd1` (create `a` at offset 64, type
+`HAMMER2`), `newfs_hammer2 /dev/rsd1a`,
+`mount -u -o rw /dev/sd0a /`, `mkdir /mnt`,
+`mount_hammer2 /dev/sd1a@DATA /mnt`, and
+`hammer2 -s /mnt pfs-create ROOT`. The final `pfs-list` showed `ROOT`.
 
 The test used OpenBSD `vmd` with two sparse raw images in `/tmp`. On the host, start `vmd`, create a 6 GiB FFS disk and a 4 GiB HAMMER2 disk with `vmctl create -s`, then start the VM with `vmctl start -d /tmp/hammer2-root-test.img -d /tmp/hammer2-pfs-test.img -m 2G -L hammer2-root-test`. The first disk was installed from the OpenBSD 8.0 `bsd` and `base80.tgz` sets using `/bsd.rd`; `/bsd` remains the FFS rescue kernel. Set `tty com0` in the FFS `/etc/boot.conf` and enable the `console` getty in `/etc/ttys` for `vmctl console` access. Place the built kernel at `/bsd.hammer2` on FFS. The tested FFS boot configuration is:
 
