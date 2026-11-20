@@ -1,6 +1,7 @@
 *.o
 *.d
 /.obj/
+/install80.img
 
 /src/sbin/hammer2/hammer2
 /src/sbin/newfs_hammer2/newfs_hammer2

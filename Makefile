@@ -2,6 +2,7 @@ SUBDIRS = src
 KERNEL_SRC_DIR ?= /usr/src/sys
 KERNEL_CONFIG ?= ${KERNEL_SRC_DIR}/arch/${MACHINE}/conf/GENERIC.MP
 KERNEL_BUILD_DIR ?= ${.CURDIR}/.obj/kernel/${MACHINE}.MP
+INSTALL80_BASE ?=
 
 .PHONY: all clean kernel install-kernel $(SUBDIRS)
 
@@ -23,6 +24,14 @@ install-kernel: kernel
 		install -o root -g wheel -m 700 ${KERNEL_BUILD_DIR}/bsd /bsd.hammer2; \
 	else \
 		doas install -o root -g wheel -m 700 ${KERNEL_BUILD_DIR}/bsd /bsd.hammer2; \
+	fi
+
+# Set INSTALL80_BASE to an existing OpenBSD 8.0 amd64 image to skip the download.
+install80.img: kernel all
+	@if [ "$$(id -u)" -eq 0 ]; then \
+		sh ./script/install80-img.sh "$@" "${INSTALL80_BASE}" "${KERNEL_BUILD_DIR}/bsd"; \
+	else \
+		doas sh ./script/install80-img.sh "$@" "${INSTALL80_BASE}" "${KERNEL_BUILD_DIR}/bsd"; \
 	fi
 
 install:
