@@ -11,6 +11,7 @@ The existing `make kernel` and `make install-kernel` targets build and install `
 - [x] Record the OpenBSD release and architecture, DragonFlyBSD source revision, port commit, kernel configuration, and compiler used for the test: OpenBSD 8.0 amd64, DragonFlyBSD `d37499e259`, port baseline `f4d399e`, `GENERIC.MP`, OpenBSD clang 22.1.6.
 - [x] Build the HAMMER2-enabled `GENERIC.MP` kernel with the root mount changes. `make KERNEL_BUILD_DIR=/tmp/hammer2-root-mp-build kernel` completed on OpenBSD 8.0 amd64 and produced `/tmp/hammer2-root-mp-build/bsd`.
 - [ ] Confirm `newfs_hammer2`, `mount_hammer2`, `fsck_hammer2`, and `hammer2` build and work on a non-root test volume.
+- The four userspace tools build with `make -s` on the target host. A non-root volume test is still pending.
 - [ ] Capture a VM boot log with the existing FFS root and `/bsd.hammer2`.
 - [ ] Keep a known working kernel and rescue image available on the FFS boot partition.
 
@@ -29,8 +30,11 @@ The existing `make kernel` and `make install-kernel` targets build and install `
 - [x] Refactor common volume and PFS setup so normal mounts and root mounts share validation and cleanup code. (Both now call `hammer2_mount_impl()`.)
 - [x] Implement `hammer2_mountroot()` using the kernel-provided `rootdev` block vnode, `vfs_rootmountalloc()`, and the standard mount list/statfs handoff. The root path bypasses pathname lookup and `copyinstr()`; the full MP kernel links. Boot behavior is covered by the separate runtime checks below.
 - [ ] Define how the root PFS is selected at boot. Start with a documented `ROOT` label; reject a missing or ambiguous PFS with a useful console error. Decide whether a boot-time override is needed after the first working boot.
+- The initial root selection is the `ROOT` PFS on the selected HAMMER2 root partition. The kernel mounts it read-only and prints the selected source on success. A missing `ROOT` label fails with `ENOENT`; duplicate-label handling and a boot-time override remain to be decided after VM testing.
 - [ ] Check the root vnode type, mount flags, vnode references, device open/close, and all failure cleanup against the target OpenBSD VFS conventions.
+- The root path now rejects a non-block vnode, starts read-only, and releases device vnode references on both pre-open and post-open cleanup paths. A fresh `make KERNEL_BUILD_DIR=/tmp/hammer2-root-mp-build kernel` completed and linked `/tmp/hammer2-root-mp-build/bsd`; runtime verification remains pending.
 - [ ] Confirm the mounted root is initially usable read-only and can be remounted read/write during startup.
+- `mount_hammer2` now accepts both `-u node` and the `-o update special node` form used by OpenBSD `mount(8)`; its rebuild passed. Update failures also print a valid source name when no special argument was supplied. Root remount behavior still needs a VM boot test.
 - [ ] Ensure kernel diagnostics identify the device, selected PFS, and failure stage without exposing misleading success messages.
 
 ## 4. Prepare a disposable boot image

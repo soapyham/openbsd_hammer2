@@ -162,6 +162,7 @@ hammer2_close_devvp(const hammer2_devvp_list_t *devvpl, struct proc *runp)
 			vput(devvp);
 
 			e->open = 0;
+			e->devvp = NULL;
 		}
 	}
 
@@ -246,8 +247,9 @@ hammer2_cleanup_devvp(hammer2_devvp_list_t *devvpl)
 		TAILQ_REMOVE(devvpl, e, entry);
 
 		/* Cleanup device vnode. */
-		KKASSERT(e->devvp);
-		//vrele(e->devvp); /* unneeded on OpenBSD */
+		/* hammer2_close_devvp() consumes references on open vnodes. */
+		if (e->devvp != NULL)
+			vrele(e->devvp);
 		e->devvp = NULL;
 
 		/* Cleanup path. */

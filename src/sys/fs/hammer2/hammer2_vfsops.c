@@ -518,6 +518,13 @@ hammer2_mountroot(void)
 		swapdev_vp = NULL;
 		return (error);
 	}
+	if (devvp->v_type != VBLK) {
+		hprintf("root device is not a block device\n");
+		vrele(devvp);
+		vrele(swapdev_vp);
+		swapdev_vp = NULL;
+		return (ENOTBLK);
+	}
 	error = vfs_rootmountalloc(MOUNT_HAMMER2, "root_device", &mp);
 	if (error) {
 		vrele(swapdev_vp);
@@ -525,6 +532,7 @@ hammer2_mountroot(void)
 		vrele(devvp);
 		return (error);
 	}
+	mp->mnt_flag |= MNT_RDONLY;
 
 	/* The ROOT PFS is the fixed initial root selection policy. */
 	snprintf(devname, sizeof(devname), "%s@ROOT", mp->mnt_stat.f_mntfromname);
@@ -532,6 +540,7 @@ hammer2_mountroot(void)
 	args.fspec = devname;
 	error = hammer2_mount_impl(mp, "/", &args, NULL, curproc, devvp);
 	if (error) {
+		hprintf("root PFS ROOT mount failed: %d\n", error);
 		vfs_unbusy(mp);
 		vfs_mount_free(mp);
 		vrele(swapdev_vp);
@@ -539,6 +548,8 @@ hammer2_mountroot(void)
 		return (error);
 	}
 	rootvp = devvp;
+	hprintf("root PFS %s mounted read-only\n",
+	    mp->mnt_stat.f_mntfromname);
 	TAILQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	vfs_unbusy(mp);
 	return (0);

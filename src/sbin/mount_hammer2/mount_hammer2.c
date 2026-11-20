@@ -59,8 +59,8 @@ main(int argc, char **argv)
 	struct hammer2_mount_info args;
 	char canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
 	const char *errcause;
-	char *val, *p, **argp;
-	int ch, mntflags = 0, initflags = 0;
+	char *val, **argp;
+	int ch, mntflags = 0;
 
 	setprogname(argv[0]);
 
@@ -72,7 +72,7 @@ main(int argc, char **argv)
 			getmntopts(optarg, mopts, &mntflags);
 			break;
 		case 'u':
-			initflags |= MNT_UPDATE;
+			mntflags |= MNT_UPDATE;
 			break;
 		case '?':
 		default:
@@ -83,14 +83,14 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 	argp = argv;
-	mntflags |= initflags;
-
-	/* Only the mount point need be specified in update mode. */
-	if (initflags & MNT_UPDATE) {
-		if (argc != 1) {
+	/* mount(8) passes -o update with special and node. */
+	if (mntflags & MNT_UPDATE) {
+		if (argc != 1 && argc != 2) {
 			usage("missing parameter (node)");
 			/* not reached */
 		}
+		if (argc == 2)
+			argp++;
 		goto ignore_special;
 	}
 
@@ -146,7 +146,9 @@ ignore_special:
 			errcause = strerror(errno);
 			break;
 		}
-		errx(1, "%s on %s: %s", args.fspec, canon_dir, errcause);
+		errx(1, "%s on %s: %s",
+		    args.fspec != NULL ? args.fspec : "mounted filesystem",
+		    canon_dir, errcause);
 	}
 
 	return (0);

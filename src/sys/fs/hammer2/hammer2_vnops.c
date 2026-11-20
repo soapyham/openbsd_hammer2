@@ -2769,7 +2769,8 @@ hammer2_vinit(struct mount *mp, struct vnode **vpp)
 	case VCHR:
 	case VBLK:
 		vp->v_op = &hammer2_specvops;
-		nvp = checkalias(vp, (dev_t)(uintptr_t)vp, mp);
+		nvp = checkalias(vp,
+		    makedev(ip->meta.rmajor, ip->meta.rminor), mp);
 		if (nvp) {
 			/*
 			 * Discard unneeded vnode, but save its inode. Note
