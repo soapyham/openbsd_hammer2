@@ -101,6 +101,24 @@ diff --git a/sys/conf/files b/sys/conf/files
  file lib/libkern/arch/${MACHINE_ARCH}/strchr.S | lib/libkern/strchr.c
  file lib/libkern/arch/${MACHINE_ARCH}/strrchr.S | lib/libkern/strrchr.c
  file lib/libkern/arch/${MACHINE_ARCH}/imax.S | lib/libkern/imax.c
+diff --git a/sys/kern/subr_disk.c b/sys/kern/subr_disk.c
+--- a/sys/kern/subr_disk.c
++++ b/sys/kern/subr_disk.c
+@@ -1310,6 +1310,14 @@ dk_mountroot(void)
+ 	if (DL_GETPSIZE(&dl->d_partitions[part]) == 0)
+ 		panic("root filesystem has size 0");
+ 	switch (dl->d_partitions[part].p_fstype) {
++#ifdef HAMMER2
++	case FS_HAMMER2:
++		{
++		extern int hammer2_mountroot(void);
++		mountrootfn = hammer2_mountroot;
++		}
++		break;
++#endif
+ #ifdef EXT2FS
+ 	case FS_EXT2FS:
+ 		{
 diff --git a/sys/kern/vfs_init.c b/sys/kern/vfs_init.c
 --- a/sys/kern/vfs_init.c
 +++ b/sys/kern/vfs_init.c
@@ -129,6 +147,31 @@ diff --git a/sys/kern/vfs_vnops.c b/sys/kern/vfs_vnops.c
  
  	case VFIFO:
  	case VCHR:
+diff --git a/sys/sys/disklabel.h b/sys/sys/disklabel.h
+--- a/sys/sys/disklabel.h
++++ b/sys/sys/disklabel.h
+@@ -275,6 +275,7 @@
+ #define FS_RAID		19		/* RAIDframe or softraid */
+ #define FS_NTFS		20		/* Windows/NT file system */
+ #define FS_UDF		21		/* UDF (DVD) filesystem */
++#define FS_HAMMER2	22		/* HAMMER2 file system */
+ 
+ #ifdef DKTYPENAMES
+ static const char * const fstypenames[] = {
+@@ -301,5 +302,6 @@ static const char * const fstypenames[] = {
+ 	"RAID",
+ 	"NTFS",
+ 	"UDF",
++	"HAMMER2",
+ 	NULL
+ };
+@@ -327,5 +329,6 @@ static char *fstypesnames[] = {
+ 	"", 		/* 19 */
+ 	"ntfs",		/* 20 */
+ 	"udf",		/* 21 */
++	"hammer2",	/* 22 */
+ 	NULL
+ };
 diff --git a/sys/sys/malloc.h b/sys/sys/malloc.h
 --- a/sys/sys/malloc.h
 +++ b/sys/sys/malloc.h

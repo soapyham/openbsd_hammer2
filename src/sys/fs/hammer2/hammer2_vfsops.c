@@ -51,6 +51,8 @@ static void hammer2_update_pmps(hammer2_dev_t *);
 static void hammer2_mount_helper(struct mount *, hammer2_pfs_t *);
 static void hammer2_unmount_helper(struct mount *, hammer2_pfs_t *,
     hammer2_dev_t *);
+static int hammer2_mount_impl(struct mount *, const char *, void *,
+    struct nameidata *, struct proc *, struct vnode *);
 
 struct pool hammer2_pool_inode;
 struct pool hammer2_pool_xops;
@@ -494,6 +496,59 @@ static int
 hammer2_mount(struct mount *mp, const char *path, void *data,
     struct nameidata *ndp, struct proc *p)
 {
+	return (hammer2_mount_impl(mp, path, data, ndp, p, NULL));
+}
+
+int
+hammer2_mountroot(void)
+{
+	struct hammer2_mount_info args;
+	struct mount *mp;
+	struct vnode *devvp;
+	char devname[MNAMELEN];
+	int error;
+
+	swapdev_vp = NULL;
+	error = bdevvp(swapdev, &swapdev_vp);
+	if (error)
+		return (error);
+	error = bdevvp(rootdev, &devvp);
+	if (error) {
+		vrele(swapdev_vp);
+		swapdev_vp = NULL;
+		return (error);
+	}
+	error = vfs_rootmountalloc(MOUNT_HAMMER2, "root_device", &mp);
+	if (error) {
+		vrele(swapdev_vp);
+		swapdev_vp = NULL;
+		vrele(devvp);
+		return (error);
+	}
+
+	/* The ROOT PFS is the fixed initial root selection policy. */
+	snprintf(devname, sizeof(devname), "%s@ROOT", mp->mnt_stat.f_mntfromname);
+	bzero(&args, sizeof(args));
+	args.fspec = devname;
+	error = hammer2_mount_impl(mp, "/", &args, NULL, curproc, devvp);
+	if (error) {
+		vfs_unbusy(mp);
+		vfs_mount_free(mp);
+		vrele(swapdev_vp);
+		swapdev_vp = NULL;
+		return (error);
+	}
+	rootvp = devvp;
+	TAILQ_INSERT_TAIL(&mountlist, mp, mnt_list);
+	vfs_unbusy(mp);
+	return (0);
+}
+
+/* The root device vnode is available before pathname lookup is possible. */
+static int
+hammer2_mount_impl(struct mount *mp, const char *path, void *data,
+    struct nameidata *ndp, struct proc *p, struct vnode *rootdevvp)
+{
 	struct hammer2_mount_info *args = data;
 	hammer2_dev_t *hmp = NULL, *hmp_tmp, *force_local;
 	hammer2_pfs_t *pmp = NULL, *spmp;
@@ -556,7 +611,11 @@ hammer2_mount(struct mount *mp, const char *path, void *data,
 	 * Not an update, or updating the name: look up the name
 	 * and verify that it refers to a sensible block device.
 	 */
-	error = copyinstr(args->fspec, devstr, sizeof(devstr), NULL);
+	if (rootdevvp != NULL)
+		error = strlcpy(devstr, args->fspec, sizeof(devstr)) >=
+		    sizeof(devstr) ? ENAMETOOLONG : 0;
+	else
+		error = copyinstr(args->fspec, devstr, sizeof(devstr), NULL);
 	if (error) {
 		hprintf("copyinstr failed %d\n", error);
 		return (error);
@@ -592,7 +651,16 @@ hammer2_mount(struct mount *mp, const char *path, void *data,
 
 	/* Initialize all device vnodes. */
 	TAILQ_INIT(&devvpl);
-	error = hammer2_init_devvp(mp, devstr, &devvpl, ndp, p);
+	if (rootdevvp != NULL) {
+		e = hmalloc(sizeof(*e), M_HAMMER2, M_WAITOK | M_ZERO);
+		e->devvp = rootdevvp;
+		e->path = hstrdup(devstr);
+		e->fname = hstrdup(devstr);
+		TAILQ_INSERT_TAIL(&devvpl, e, entry);
+		error = 0;
+	} else {
+		error = hammer2_init_devvp(mp, devstr, &devvpl, ndp, p);
+	}
 	if (error) {
 		hprintf("failed to initialize devvp in %s\n", devstr);
 		hammer2_cleanup_devvp(&devvpl);
@@ -1017,6 +1085,8 @@ next_hmp:
 	bzero(mp->mnt_stat.f_mntfromspec, MNAMELEN);
 	strlcpy(mp->mnt_stat.f_mntfromspec, pmp->fspec, MNAMELEN);
 	bcopy(args, &mp->mnt_stat.mount_info.hammer2_args, sizeof(*args));
+	if (rootdevvp != NULL)
+		mp->mnt_stat.mount_info.hammer2_args.fspec = NULL;
 
 	/* These two are usually the same. */
 	if (strncmp(mp->mnt_stat.f_mntfromname, mp->mnt_stat.f_mntfromspec,

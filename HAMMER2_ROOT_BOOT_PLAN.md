@@ -8,7 +8,7 @@ The existing `make kernel` and `make install-kernel` targets build and install `
 
 ## 1. Record the baseline
 
-- [x] Record the OpenBSD release and architecture, DragonFlyBSD source revision, port commit, and kernel configuration used for the test: OpenBSD 8.0 amd64, DragonFlyBSD `d37499e259`, port baseline `f4d399e`, `GENERIC.MP`. Record toolchain versions with the final build log.
+- [x] Record the OpenBSD release and architecture, DragonFlyBSD source revision, port commit, kernel configuration, and compiler used for the test: OpenBSD 8.0 amd64, DragonFlyBSD `d37499e259`, port baseline `f4d399e`, `GENERIC.MP`, OpenBSD clang 22.1.6.
 - [ ] Run `make kernel` and confirm the HAMMER2-enabled kernel builds before modifying the root mount path.
 - [ ] Confirm `newfs_hammer2`, `mount_hammer2`, `fsck_hammer2`, and `hammer2` build and work on a non-root test volume.
 - [ ] Capture a VM boot log with the existing FFS root and `/bsd.hammer2`.
@@ -16,18 +16,18 @@ The existing `make kernel` and `make install-kernel` targets build and install `
 
 ## 2. Identify HAMMER2 as a root filesystem
 
-- [ ] Choose an unused disklabel filesystem type number after checking the target OpenBSD source tree and document the choice.
-- [ ] Add `FS_HAMMER2` and its display name in `/usr/src/sys/sys/disklabel.h`; verify disklabel tools can set and show that type.
-- [ ] Add a HAMMER2 case to `dk_mountroot()` in `/usr/src/sys/kern/subr_disk.c`, guarded by the HAMMER2 kernel option, that calls `hammer2_mountroot()`.
-- [ ] Add the required function declaration and kernel configuration dependencies.
+- [x] Choose an unused disklabel filesystem type number after checking the target OpenBSD source tree: `FS_HAMMER2 = 22` follows `FS_UDF = 21` in OpenBSD 8.0. Recheck this number when rebasing to another release.
+- [ ] Add `FS_HAMMER2` and its display name in `/usr/src/sys/sys/disklabel.h`; verify disklabel tools can set and show that type. (Definition and names added; userland disklabel verification pending.)
+- [x] Add a HAMMER2 case to `dk_mountroot()` in `/usr/src/sys/kern/subr_disk.c`, guarded by the HAMMER2 kernel option, that calls `hammer2_mountroot()`.
+- [x] Add the required function declaration and kernel configuration dependencies. (`GENERIC.MP` includes `GENERIC`, which enables HAMMER2.)
 - [ ] Carry all changes to the OpenBSD base tree in `patch/openbsd80.patch` (or the repository's documented patch mechanism), then confirm `make prep` applies them to a clean matching tree.
 - [ ] Verify a kernel without HAMMER2 still builds and its existing root mount behavior is unchanged.
 
 ## 3. Implement early HAMMER2 root mounting
 
-- [ ] Trace the regular mount path through `hammer2_mount()`, `hammer2_init_devvp()`, volume header loading, and PFS lookup; identify every operation that assumes a mounted root or userspace pointer.
-- [ ] Refactor common volume and PFS setup so normal mounts and root mounts share validation and cleanup code.
-- [ ] Implement `hammer2_mountroot()` using the kernel-provided `rootdev` block vnode, `vfs_rootmountalloc()`, and the standard mount list/statfs handoff. Do not call pathname lookup or `copyinstr()` from this path.
+- [x] Trace the regular mount path through `hammer2_mount()`, `hammer2_init_devvp()`, volume header loading, and PFS lookup; identify every operation that assumes a mounted root or userspace pointer.
+- [x] Refactor common volume and PFS setup so normal mounts and root mounts share validation and cleanup code. (Both now call `hammer2_mount_impl()`.)
+- [ ] Implement `hammer2_mountroot()` using the kernel-provided `rootdev` block vnode, `vfs_rootmountalloc()`, and the standard mount list/statfs handoff. Do not call pathname lookup or `copyinstr()` from this path. (Implementation compiled; full kernel and boot checks pending.)
 - [ ] Define how the root PFS is selected at boot. Start with a documented `ROOT` label; reject a missing or ambiguous PFS with a useful console error. Decide whether a boot-time override is needed after the first working boot.
 - [ ] Check the root vnode type, mount flags, vnode references, device open/close, and all failure cleanup against the target OpenBSD VFS conventions.
 - [ ] Confirm the mounted root is initially usable read-only and can be remounted read/write during startup.
