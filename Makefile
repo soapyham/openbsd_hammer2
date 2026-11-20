@@ -1,7 +1,7 @@
 SUBDIRS = src
 KERNEL_SRC_DIR ?= /usr/src/sys
-KERNEL_CONFIG ?= ${KERNEL_SRC_DIR}/arch/${MACHINE}/conf/GENERIC
-KERNEL_BUILD_DIR ?= ${.CURDIR}/.obj/kernel/${MACHINE}
+KERNEL_CONFIG ?= ${KERNEL_SRC_DIR}/arch/${MACHINE}/conf/GENERIC.MP
+KERNEL_BUILD_DIR ?= ${.CURDIR}/.obj/kernel/${MACHINE}.MP
 
 .PHONY: all clean kernel install-kernel $(SUBDIRS)
 
