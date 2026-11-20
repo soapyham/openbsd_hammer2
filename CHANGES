@@ -1,3 +1,8 @@
+Unreleased
+==========
+- Add patch/openbsd80.patch for OpenBSD 8.0 release sources
+- Use NULL in the vflush call for OpenBSD 8.0 kernel builds
+
 v1.2.10
 =======
 - Sync with DragonFly

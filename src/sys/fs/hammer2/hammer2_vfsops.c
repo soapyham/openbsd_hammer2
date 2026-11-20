@@ -1095,7 +1095,7 @@ hammer2_unmount(struct mount *mp, int mntflags, struct proc *p)
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 	if (pmp->iroot) {
-		error = vflush(mp, NULLVP, flags);
+		error = vflush(mp, NULL, flags);
 		if (error) {
 			hprintf("vflush failed %d\n", error);
 			goto failed;
