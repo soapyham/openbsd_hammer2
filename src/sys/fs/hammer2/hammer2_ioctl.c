@@ -43,6 +43,7 @@
 #include <sys/fcntl.h>
 #include <sys/dkio.h>
 #include <sys/disklabel.h>
+#include <sys/specdev.h>
 
 /*
  * Return 1 if read-only mounted otherwise 0.  DragonFly allows bwrite(9)
@@ -915,7 +916,11 @@ hammer2_ioctl_growfs(hammer2_inode_t *ip, void *data)
 		hprintf("failed to get media size\n");
 		return (error);
 	}
-	size = (hammer2_off_t)dl.d_secperunit * dl.d_secsize;
+	/* The device vnode is a partition; the whole-disk size is unsafe here. */
+	if (DISKPART(hmp->devvp->v_rdev) >= dl.d_npartitions)
+		return (EINVAL);
+	size = (hammer2_off_t)DL_GETPSIZE(
+	    &dl.d_partitions[DISKPART(hmp->devvp->v_rdev)]) * dl.d_secsize;
 	hprintf("growfs partition-auto to %016llx\n", (long long)size);
 
 	/* Expand to devvp size unless specified. */

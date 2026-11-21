@@ -41,7 +41,7 @@ The `make kernel` and `make install-kernel` targets build and install `/bsd.hamm
 
 - [x] Create disposable VM disks with separate FFS boot and HAMMER2 root storage: `/tmp/hammer2-root-test.img` is `sd0` (6 GiB, FFS `sd0a`, swap `sd0b`); `/tmp/hammer2-pfs-test.img` is `sd1` (4 GiB, HAMMER2 `sd1a`, type 22, offset 64 sectors).
 - [ ] Install boot blocks, `/boot`, `/bsd.hammer2`, `/bsd.rd`, and a known working kernel on the FFS partition.
-- [x] Format the HAMMER2 partition and create the `ROOT` PFS using the port's tools (`newfs_hammer2 -s 3G -L ROOT /dev/rsd1a`). The explicit 3 GiB size avoids the formatter rounding the 4 GiB disk beyond its partition end.
+- [x] Format the HAMMER2 partition and create the `ROOT` PFS using the port's tools. The initial VM used `newfs_hammer2 -s 3G -L ROOT /dev/rsd1a`; the installer now omits `-s` so the formatter uses the partition size and rounds down to its 8 MiB alignment.
 - [x] Populate `ROOT` with the matching OpenBSD 8.0 `base80.tgz`, copy the installed `/etc` and `/var`, run `MAKEDEV all`, and install `mount_hammer2` and `fsck_hammer2` in `/sbin`. The VM reached login from this root.
 - [x] Create a minimal `/etc/fstab` for the HAMMER2 root and swap. `mount`, `mount -u /`, and startup checks completed in the VM.
 - [ ] Keep a way to select the FFS rescue kernel/root at the boot prompt. Do not change the host's default boot configuration during development.
@@ -64,6 +64,7 @@ The `make kernel` and `make install-kernel` targets build and install `/bsd.hamm
 - [ ] Document the tested partition layout, format/population commands, fstab entries, and boot prompt command.
 - [x] Once explicit root selection is reliable, configure the test VM to select `/bsd.hammer2` and the HAMMER2 root by default. The boot partition's `/etc/boot.conf` uses `boot /bsd.hammer2`; the HAMMER2 kernel selects an unambiguous HAMMER2 disklabel partition, preferring the boot disk, and uses partition `b` on the boot disk for swap.
 - [x] Cold boot without manual root or swap input and confirm the same root device and PFS are mounted. The single-disk VM selected `sd0d` and `sd0b`, mounted `sd0d@ROOT`, and reached login.
+- [ ] After filesystem and recovery testing, restore boot-time kernel relinking (KARL) for the custom HAMMER2 kernel. Package a relink kit matching `bsd.hammer2`, adapt `reorder_kernel` to verify and replace the kernel on `/bootfs` rather than the stock `/bsd`, then boot the relinked kernel and confirm HAMMER2 root, swap, and rescue paths still work. Until then, the relink failure is expected and does not prevent booting, but this kernel does not receive KARL randomization.
 - [ ] Review the patch for OpenBSD source tree assumptions and commit kernel, patch, and documentation changes with the passing test results.
 
 ## Acceptance criteria
@@ -95,7 +96,8 @@ same disk or a second disk. The same disk option creates a 512 MiB FFS boot
 partition `a`, 128 MiB swap partition `b`, and HAMMER2 partition `d` on a
 disk of at least 4 GiB. The second disk option keeps FFS boot files on the
 first disk and uses HAMMER2 partition `a` on the second disk. Both paths
-format a 3 GiB `ROOT` PFS. The install script
+format a `ROOT` PFS using the full HAMMER2 partition, rounded down to the
+formatter's 8 MiB alignment. The install script
 uses the OpenBSD installer GPT layout when booted under EFI. For a GPT target
 with an EFI System Partition, it copies the release EFI loaders to the FFS
 boot root before `installboot` populates the EFI System Partition. EFI boot
@@ -122,6 +124,17 @@ The same kernel was also tested with the previous two-disk VM. It selected
 `sd1a` as HAMMER2 root and `sd0b` as swap without prompts, mounted
 `sd1a@ROOT`, and reached login. If multiple HAMMER2 partitions exist and
 none is uniquely on the boot disk, the kernel prompts for root and swap.
+
+The former `-s 3G` installer limit left space unused on larger partitions.
+On 2026-11-20, a disposable 4 GiB disk with a 3.375 GiB HAMMER2 partition
+was formatted without `-s`; `newfs_hammer2` reported a 3.37 GiB volume,
+leaving less than 8 MiB for alignment. A kernel `growfs` fix now reads the
+selected disklabel partition size instead of the whole-disk size. On the
+older single-disk VM, `hammer2 growfs /` increased the mounted root from
+2.8 GiB to 3.2 GiB, and the VM rebooted to login. Existing installs must
+boot the corrected kernel before running `growfs`; running it with the old
+kernel could extend the volume past its partition boundary. New installs
+also receive the `hammer2` command needed for growth.
 
 On 2026-11-20, the new install path was exercised in `vmd` with a 2 GiB FFS
 boot disk (`sd0`), a 4 GiB HAMMER2 disk (`sd1`), and the custom install image

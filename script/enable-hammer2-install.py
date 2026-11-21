@@ -35,7 +35,7 @@ addition = '''\t# The standard layout created an FFS root on the boot disk. Move
 \t\t\techo "HAMMER2 partition $HAMMER2_PART is required."
 \t\t\texit 1
 \t\tfi
-\t\tnewfs_hammer2 -s 3G -L ROOT \\
+\t\tnewfs_hammer2 -L ROOT \\
 \t\t    /dev/r${HAMMER2_DISK}${HAMMER2_PART} || exit 1
 \t\tfor _entry in $FSENT; do
 \t\t\tcase $_entry in /!*) HAMMER2_BOOTDEV=${_entry#*!};; esac
@@ -103,6 +103,8 @@ replace("\tmd_installboot $ROOTDISK\n\n\tchmod og-rwx", '''\tif [[ $HAMMER2_INST
 \t\t    /mnt/usr/mdec/biosboot /mnt/bootfs/boot || exit 1
 \t\tcp /sbin/mount_hammer2 /mnt/sbin/mount_hammer2
 \t\tcp /sbin/fsck_hammer2 /mnt/sbin/fsck_hammer2
+\t\tcp /sbin/hammer2 /mnt/sbin/hammer2
+\t\tcp /sbin/newfs_hammer2 /mnt/sbin/newfs_hammer2
 \telse
 \t\tmd_installboot $ROOTDISK
 \tfi
