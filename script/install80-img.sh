@@ -211,8 +211,12 @@ custom installer is also at /8.0/amd64/bsd.rd.hammer2. The stock ramdisk
 cannot mount HAMMER2. The (I)nstall workflow offers HAMMER2 root on the same
 disk or a second disk. For one disk of at least 4 GiB, choose "same disk".
 The installer creates a 512 MiB FFS boot partition a, 128 MiB swap partition
-b, and HAMMER2 partition d. At first boot, enter that disk's d partition
-(for example sd0d) for root and b (sd0b) for swap. For two disks, choose
+b, and HAMMER2 partition d. For EFI boot, choose whole disk GPT or an
+OpenBSD GPT area with an EFI System Partition. The installer copies the EFI
+loaders to that partition during installboot. The HAMMER2 kernel selects the
+root partition automatically when it is unambiguous. If multiple HAMMER2
+partitions make the choice ambiguous, enter the root and swap devices at
+the prompts. For two disks, choose
 "second disk"; the FFS boot disk is initialized normally, and HAMMER2 uses
 partition a of a separate disk of at least 4 GiB.
 See HAMMER2_ROOT_BOOT_PLAN.md in the source repository for the tested VM path.

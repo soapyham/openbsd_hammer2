@@ -62,8 +62,8 @@ The `make kernel` and `make install-kernel` targets build and install `/bsd.hamm
 ## 6. Make the boot repeatable
 
 - [ ] Document the tested partition layout, format/population commands, fstab entries, and boot prompt command.
-- [ ] Once explicit root selection is reliable, configure the test VM to select `/bsd.hammer2` and the HAMMER2 root by default; document the exact OpenBSD mechanism used.
-- [ ] Reboot without manual intervention and confirm the same root device and PFS are mounted.
+- [x] Once explicit root selection is reliable, configure the test VM to select `/bsd.hammer2` and the HAMMER2 root by default. The boot partition's `/etc/boot.conf` uses `boot /bsd.hammer2`; the HAMMER2 kernel selects an unambiguous HAMMER2 disklabel partition, preferring the boot disk, and uses partition `b` on the boot disk for swap.
+- [x] Cold boot without manual root or swap input and confirm the same root device and PFS are mounted. The single-disk VM selected `sd0d` and `sd0b`, mounted `sd0d@ROOT`, and reached login.
 - [ ] Review the patch for OpenBSD source tree assumptions and commit kernel, patch, and documentation changes with the passing test results.
 
 ## Acceptance criteria
@@ -96,9 +96,14 @@ partition `a`, 128 MiB swap partition `b`, and HAMMER2 partition `d` on a
 disk of at least 4 GiB. The second disk option keeps FFS boot files on the
 first disk and uses HAMMER2 partition `a` on the second disk. Both paths
 format a 3 GiB `ROOT` PFS. The install script
+uses the OpenBSD installer GPT layout when booted under EFI. For a GPT target
+with an EFI System Partition, it copies the release EFI loaders to the FFS
+boot root before `installboot` populates the EFI System Partition. EFI boot
+still needs a firmware VM test; the available `vmd` setup boots BIOS only.
+The install script
 mounts HAMMER2 at `/mnt`, installs the selected sets, puts `/bsd.hammer2` and
 `/boot` on the FFS partition, and writes an FFS boot configuration that
-prompts for the HAMMER2 root device at startup. The image is
+selects the HAMMER2 root automatically when unambiguous. The image is
 about 928 MiB and needs root access to assemble its boot partitions.
 
 On 2026-11-20, the same disk path was tested from the rebuilt image in
@@ -107,9 +112,16 @@ media. Install automatically created `sd0a` FFS, `sd0b` swap, and `sd0d`
 HAMMER2. It installed `bsd`, `bsd.rd`, and `base80.tgz`, installed boot blocks,
 and reported success without manual repair. Booting with only the target disk,
 the VM mounted `sd0d@ROOT` as `/`, mounted `sd0a` at `/bootfs`, reached login,
-and retained a file written to `/root` across a clean reboot. At the boot
-prompt the kernel still asks for `sd0d` and `sd0b` because `boot.conf` uses
-`-a`; automatic root device selection remains separate work.
+and retained a file written to `/root` across a clean reboot. An updated
+HAMMER2 kernel was later tested on the same disk with `boot /bsd.hammer2`:
+it selected `sd0d` as root and `sd0b` as swap without prompts, mounted
+`sd0d@ROOT`, and reached login. `boot /bsd.hammer2 -a` still allows manual
+selection when needed.
+
+The same kernel was also tested with the previous two-disk VM. It selected
+`sd1a` as HAMMER2 root and `sd0b` as swap without prompts, mounted
+`sd1a@ROOT`, and reached login. If multiple HAMMER2 partitions exist and
+none is uniquely on the boot disk, the kernel prompts for root and swap.
 
 On 2026-11-20, the new install path was exercised in `vmd` with a 2 GiB FFS
 boot disk (`sd0`), a 4 GiB HAMMER2 disk (`sd1`), and the custom install image

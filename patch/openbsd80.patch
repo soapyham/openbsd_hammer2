@@ -119,6 +119,100 @@ diff --git a/sys/kern/subr_disk.c b/sys/kern/subr_disk.c
  #ifdef EXT2FS
  	case FS_EXT2FS:
  		{
+@@ -1431,6 +1431,11 @@
+ 	dev_t nrootdev, nswapdev = NODEV, temp = NODEV;
+ 	struct ifnet *ifp = NULL;
+ 	struct disk *dk;
++#ifdef HAMMER2
++	struct disk *h2rootdk = NULL, *h2bootdk = NULL, *h2candidate = NULL;
++	int h2part = -1, h2candidatepart = -1, h2count = 0;
++	int h2bootpart = -1, h2bootcount = 0, h2i;
++#endif
+ 	char buf[128];
+ #if defined(NFSCLIENT)
+ 	extern char *nfsbootdevname;
+@@ -1485,6 +1490,43 @@
+ 	dk = NULL;
+ 	if (mountroot == NULL && bootdv == NULL)
+ 		boothowto |= RB_ASKNAME;
++#ifdef HAMMER2
++	/* The FFS boot partition can carry a HAMMER2 root on this disk or
++	 * on one other disk. Prefer this disk; require an unambiguous choice. */
++	if (mountroot == NULL && bootdv != NULL &&
++	    bootdv->dv_class == DV_DISK && !(boothowto & RB_ASKNAME)) {
++		TAILQ_FOREACH(dk, &disklist, dk_link) {
++			if (dk->dk_device == bootdv)
++				h2bootdk = dk;
++			if (dk->dk_label == NULL)
++				continue;
++			for (h2i = 0; h2i < dk->dk_label->d_npartitions;
++			    h2i++) {
++				if (dk->dk_label->d_partitions[h2i].p_fstype !=
++				    FS_HAMMER2 ||
++				    DL_GETPSIZE(&dk->dk_label->d_partitions[h2i]) == 0)
++					continue;
++				h2candidate = dk;
++				h2candidatepart = h2i;
++				h2count++;
++				if (dk->dk_device == bootdv) {
++					h2bootpart = h2i;
++					h2bootcount++;
++				}
++			}
++		}
++		if (h2bootcount == 1) {
++			h2rootdk = h2bootdk;
++			h2part = h2bootpart;
++		} else if (h2count == 1) {
++			h2rootdk = h2candidate;
++			h2part = h2candidatepart;
++		} else if (h2count > 1) {
++			printf("multiple HAMMER2 partitions; select root manually\n");
++			boothowto |= RB_ASKNAME;
++		}
++	}
++#endif
+ 	if (boothowto & RB_ASKNAME) {
+ 		while (1) {
+ 			printf("root device");
+@@ -1580,6 +1622,13 @@
+ 		 * `swap generic'
+ 		 */
+ 		rootdv = bootdv;
++#ifdef HAMMER2
++		if (h2rootdk != NULL) {
++			rootdv = h2rootdk->dk_device;
++			bcopy(h2rootdk->dk_label->d_uid, rootduid,
++			    sizeof(rootduid));
++		}
++#endif
+ 
+ 		if (bootdv->dv_class == DV_DISK) {
+ 			if (!duid_iszero(rootduid)) {
+@@ -1600,8 +1649,21 @@
+ 			 * Root and swap are on the disk.
+ 			 * Assume swap is on partition b.
+ 			 */
+-			rootdev = MAKEDISKDEV(majdev, rootdv->dv_unit, part);
+-			nswapdev = MAKEDISKDEV(majdev, rootdv->dv_unit, 1);
++#ifdef HAMMER2
++			if (h2rootdk != NULL) {
++				rootdev = MAKEDISKDEV(majdev,
++				    rootdv->dv_unit, h2part);
++				majdev = findblkmajor(bootdv);
++				nswapdev = MAKEDISKDEV(majdev,
++				    bootdv->dv_unit, 1);
++			} else
++#endif
++			{
++				rootdev = MAKEDISKDEV(majdev, rootdv->dv_unit,
++				    part);
++				nswapdev = MAKEDISKDEV(majdev, rootdv->dv_unit,
++				    1);
++			}
+ 		} else {
+ 			/*
+ 			 * Root and swap are on a net.
 diff --git a/sys/kern/vfs_init.c b/sys/kern/vfs_init.c
 --- a/sys/kern/vfs_init.c
 +++ b/sys/kern/vfs_init.c

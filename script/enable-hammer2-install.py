@@ -92,9 +92,13 @@ replace("\tget_rootinfo\n\n\tencrypt_root", '''\tget_rootinfo
 
 \tencrypt_root''')
 replace("\tmd_installboot $ROOTDISK\n\n\tchmod og-rwx", '''\tif [[ $HAMMER2_INSTALL != no ]]; then
-\t\t# installboot reads /boot from the FFS root on the boot disk.
-\t\tmkdir -p /mnt/bootfs/etc
+\t\t# installboot reads /boot from FFS and puts EFI loaders on the ESP.
+\t\tmkdir -p /mnt/bootfs/etc /mnt/bootfs/usr/mdec
 \t\tcp /boot /mnt/bootfs/boot
+\t\tif disk_has $ROOTDISK gpt efisys; then
+\t\t\tcp /mnt/usr/mdec/BOOTIA32.EFI \\
+\t\t\t    /mnt/usr/mdec/BOOTX64.EFI /mnt/bootfs/usr/mdec/ || exit 1
+\t\tfi
 \t\tinstallboot -r /mnt/bootfs $ROOTDISK \\
 \t\t    /mnt/usr/mdec/biosboot /mnt/bootfs/boot || exit 1
 \t\tcp /sbin/mount_hammer2 /mnt/sbin/mount_hammer2
@@ -108,7 +112,7 @@ replace("\tsha256 /mnt/bsd |", '''\tif [[ $HAMMER2_INSTALL != no ]]; then
 \t\tgzip -dc /bsd.hammer2.gz > /mnt/bootfs/bsd.hammer2 || exit 1
 \t\tchmod 700 /mnt/bootfs/bsd.hammer2
 \t\tcat > /mnt/bootfs/etc/boot.conf <<EOF
-boot /bsd.hammer2 -a
+boot /bsd.hammer2
 EOF
 \tfi
 
