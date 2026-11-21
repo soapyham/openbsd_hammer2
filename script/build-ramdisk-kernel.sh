@@ -12,13 +12,19 @@ config_source="$source_dir/arch/amd64/conf/RAMDISK_CD"
 }
 mkdir -p "$build_dir"
 config_file="$build_dir/RAMDISK_CD.HAMMER2"
+new_config="$build_dir/RAMDISK_CD.HAMMER2.new"
 awk '
     $1 == "option" && $2 ~ /^MINIROOTSIZE=/ {
-        print "option\t\tMINIROOTSIZE=49152"
+        print "option\t\tMINIROOTSIZE=81920"
         next
     }
     { print }
     $1 == "option" && $2 == "FFS" { print "option\t\tHAMMER2" }
-' "$config_source" > "$config_file"
+' "$config_source" > "$new_config"
+if ! cmp -s "$new_config" "$config_file"; then
+    # config(8) does not track changed option values in object dependencies.
+    rm -f "$build_dir/rd.o"
+fi
+mv "$new_config" "$config_file"
 config -b "$build_dir" -s "$source_dir" "$config_file"
 make -C "$build_dir"

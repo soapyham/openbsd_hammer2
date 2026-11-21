@@ -97,6 +97,9 @@ rdvnd=$(vnconfig -v "$work/stock-mr.fs" | tail -1)
 mount -r "/dev/${rdvnd}a" "$work/stock-mr"
 rdmounted=yes
 (cd "$work/stock-mr" && pax -rw -pe . "$work/custom-mr")
+python3 "$repo/script/enable-hammer2-install.py" "$work/custom-mr/install.sub"
+gzip -9cn "$kernel" > "$work/custom-mr/bsd.hammer2.gz"
+cp "$work/src/boot" "$work/custom-mr/boot"
 umount "$work/stock-mr"
 rdmounted=no
 vnconfig -u "$rdvnd"
@@ -146,7 +149,7 @@ for binary in "$work/disklabel/disklabel" \
 	done
 done
 
-makefs -s 24m -o rdroot,minfree=0,density=4096,bsize=4096,fsize=512 \
+makefs -s 40m -o rdroot,minfree=0,density=4096,bsize=4096,fsize=512 \
     "$work/custom-mr.fs" "$work/custom-mr"
 # makefs's generic rdroot label omits geometry needed by vnd; write a
 # complete label so the image is mountable for inspection and by rd(4).
@@ -158,12 +161,12 @@ bytes/sector: 512
 sectors/track: 100
 tracks/cylinder: 1
 sectors/cylinder: 100
-cylinders: 492
-total sectors: 49152
+cylinders: 820
+total sectors: 81920
 boundstart: 0
 boundend: 49152
 16 partitions:
-  a: 49152 0 4.2BSD 512 4096 0
+  a: 81920 0 4.2BSD 512 4096 0
 EOF
 rdvnd=$(vnconfig -v "$work/custom-mr.fs" | tail -1)
 disklabel -R "$rdvnd" "$work/ramdisk.label"
@@ -205,8 +208,10 @@ with "mount -u -o rw /dev/sd0a /" (adjust the device if needed).
 
 The unmodified release installer remains at /8.0/amd64/bsd.rd, and the
 custom installer is also at /8.0/amd64/bsd.rd.hammer2. The stock ramdisk
-cannot mount HAMMER2. The normal (I)nstall workflow does not yet offer a
-HAMMER2 root choice; use the shell to prepare ROOT.
+cannot mount HAMMER2. The (I)nstall workflow offers HAMMER2 root on a second
+disk. Use the first disk for FFS boot files and a separate disk of at least
+4 GiB for HAMMER2 ROOT. At first boot, answer the root prompt with the
+HAMMER2 disk's a partition (for example sd1a).
 See HAMMER2_ROOT_BOOT_PLAN.md in the source repository for the tested VM path.
 EOF
 

@@ -82,17 +82,46 @@ and verifies the official `install80.img` if needed, and writes an expanded
 `install80.img` in the repository root. Set `INSTALL80_BASE=/path/to/install80.img`
 to reuse an existing release image. The target also builds a custom
 `RAMDISK_CD` kernel with HAMMER2 enabled and expands the stock installer
-ramdisk to 24 MiB for the patched `disklabel`, HAMMER2 tools, and their
-libraries. The image boots this custom `/bsd.rd` by default. The full
+ramdisk to 40 MiB for the patched `disklabel`, HAMMER2 tools, the compressed
+install kernel, and their libraries. The image boots this custom `/bsd.rd` by default. The full
 `/bsd.hammer2` single-user kernel remains available from the boot prompt;
 the unmodified release ramdisk is at `/8.0/amd64/bsd.rd`. The image retains
 the release sets, adds
 `/bsd.hammer2` and
 `/8.0/amd64/bsd.hammer2`, and puts `hammer2`, `newfs_hammer2`,
 `mount_hammer2`, and `fsck_hammer2` under `/8.0/amd64/hammer2-tools/`.
-The normal installer workflow still has no HAMMER2 root option; select
-`(S)hell` to prepare a HAMMER2 partition. The image is
+The interactive `(I)nstall` workflow now offers a HAMMER2 root option on a
+second disk. The first disk receives FFS boot files, and the second disk
+receives a 3 GiB HAMMER2 `ROOT` PFS on partition `a`. The install script
+mounts HAMMER2 at `/mnt`, installs the selected sets, puts `/bsd.hammer2` and
+`/boot` on the FFS partition, and writes an FFS boot configuration that
+prompts for the HAMMER2 root device at startup. The second disk must be at
+least 4 GiB. The image is
 about 928 MiB and needs root access to assemble its boot partitions.
+
+On 2026-11-20, the new install path was exercised in `vmd` with a 2 GiB FFS
+boot disk (`sd0`), a 4 GiB HAMMER2 disk (`sd1`), and the custom install image
+as set media (`sd2`). The installer formatted `sd1a`, mounted `ROOT` read/write,
+and installed `bsd`, `bsd.rd`, and `base80.tgz`. An initial run exposed three
+installer assumptions: `printf` was absent from the ramdisk, non-FFS entries
+were mounted read-only, and the installer passed `-o async` to HAMMER2. These
+were fixed in `script/enable-hammer2-install.py`. The run also found that
+`installboot -cr` expects boot files under the install root; the script now
+passes explicit boot stage paths for the separate FFS partition. That last
+correction was applied manually in the VM before booting and is included in
+the rebuilt `install80.img`. The resulting VM booted `/bsd.hammer2` from FFS with `-a`,
+mounted `sd1a@ROOT`, reached login, and showed `/` on HAMMER2 and `/bootfs`
+on FFS. The ramdisk reservation is now 40 MiB to hold the compressed kernel.
+
+The final `install80.img` was then tested from scratch in `vmd` with fresh
+2 GiB and 4 GiB target disks. The interactive installer completed without
+manual repair and printed its success message. A cold boot from those target
+disks mounted `sd1a@ROOT` as `/`, mounted `sd0a` at `/bootfs`, and reached
+login. Both installed HAMMER2 mount and fsck tools were present. A file
+written under `/root` persisted across a clean reboot. The boot configuration
+still prompts for `sd1a` and `sd0b`; automatic root device selection remains
+future work. The VM reported `reorder_kernel` failure because this development
+kernel has no matching relink set.
 
 On 2026-11-20, `make KERNEL_BUILD_DIR=/tmp/hammer2-root-mp-build
 INSTALL80_BASE=/tmp/install80.orig.img install80.img` completed. The image
