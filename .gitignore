@@ -1,8 +1,17 @@
+# Build directories and generated files.
+**/.obj/
+**/obj/
+**/build/
 *.o
 *.d
-/.obj/
-/install80.img
+*.a
+*.so
+*.so.*
+*.img
+*.iso
+*.core
 
+# Programs built in the source tree.
 /src/sbin/hammer2/hammer2
 /src/sbin/newfs_hammer2/newfs_hammer2
 /src/sbin/mount_hammer2/mount_hammer2
