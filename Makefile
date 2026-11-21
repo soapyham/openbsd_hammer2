@@ -5,7 +5,7 @@ KERNEL_BUILD_DIR ?= ${.CURDIR}/.obj/kernel/${MACHINE}.MP
 RAMDISK_BUILD_DIR ?= ${.CURDIR}/.obj/kernel/${MACHINE}.RAMDISK.HAMMER2
 INSTALL80_BASE ?=
 
-.PHONY: all clean kernel ramdisk-kernel install-kernel $(SUBDIRS)
+.PHONY: all clean kernel ramdisk-kernel install-kernel fetch-src $(SUBDIRS)
 
 all: $(SUBDIRS)
 $(SUBDIRS):
@@ -14,6 +14,14 @@ clean:
 	for dir in $(SUBDIRS); do \
 		$(MAKE) -C $$dir $@; \
 	done
+# Fetch and verify the OpenBSD 8.0 source archives before building.
+# The installer also needs the disklabel sources from src.tar.gz.
+fetch-src:
+	@if [ "$$(id -u)" -eq 0 ]; then \
+		sh ./script/fetch-openbsd-src.sh /usr/src; \
+	else \
+		doas sh ./script/fetch-openbsd-src.sh /usr/src; \
+	fi
 kernel:
 	@test -f ${KERNEL_SRC_DIR}/hammer2/hammer2.h || { echo "HAMMER2 sources missing from ${KERNEL_SRC_DIR}; run make prep" >&2; exit 1; }
 	@test -f ${KERNEL_SRC_DIR}/lib/libkern/icrc32.c || { echo "HAMMER2 icrc32.c missing from ${KERNEL_SRC_DIR}; run make prep" >&2; exit 1; }
