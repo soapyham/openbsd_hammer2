@@ -90,14 +90,26 @@ the release sets, adds
 `/bsd.hammer2` and
 `/8.0/amd64/bsd.hammer2`, and puts `hammer2`, `newfs_hammer2`,
 `mount_hammer2`, and `fsck_hammer2` under `/8.0/amd64/hammer2-tools/`.
-The interactive `(I)nstall` workflow now offers a HAMMER2 root option on a
-second disk. The first disk receives FFS boot files, and the second disk
-receives a 3 GiB HAMMER2 `ROOT` PFS on partition `a`. The install script
+The interactive `(I)nstall` workflow offers a HAMMER2 root option on the
+same disk or a second disk. The same disk option creates a 512 MiB FFS boot
+partition `a`, 128 MiB swap partition `b`, and HAMMER2 partition `d` on a
+disk of at least 4 GiB. The second disk option keeps FFS boot files on the
+first disk and uses HAMMER2 partition `a` on the second disk. Both paths
+format a 3 GiB `ROOT` PFS. The install script
 mounts HAMMER2 at `/mnt`, installs the selected sets, puts `/bsd.hammer2` and
 `/boot` on the FFS partition, and writes an FFS boot configuration that
-prompts for the HAMMER2 root device at startup. The second disk must be at
-least 4 GiB. The image is
+prompts for the HAMMER2 root device at startup. The image is
 about 928 MiB and needs root access to assemble its boot partitions.
+
+On 2026-11-20, the same disk path was tested from the rebuilt image in
+`vmd` using one fresh 4 GiB target disk and the image as separate install
+media. Install automatically created `sd0a` FFS, `sd0b` swap, and `sd0d`
+HAMMER2. It installed `bsd`, `bsd.rd`, and `base80.tgz`, installed boot blocks,
+and reported success without manual repair. Booting with only the target disk,
+the VM mounted `sd0d@ROOT` as `/`, mounted `sd0a` at `/bootfs`, reached login,
+and retained a file written to `/root` across a clean reboot. At the boot
+prompt the kernel still asks for `sd0d` and `sd0b` because `boot.conf` uses
+`-a`; automatic root device selection remains separate work.
 
 On 2026-11-20, the new install path was exercised in `vmd` with a 2 GiB FFS
 boot disk (`sd0`), a 4 GiB HAMMER2 disk (`sd1`), and the custom install image

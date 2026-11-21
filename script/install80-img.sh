@@ -208,10 +208,13 @@ with "mount -u -o rw /dev/sd0a /" (adjust the device if needed).
 
 The unmodified release installer remains at /8.0/amd64/bsd.rd, and the
 custom installer is also at /8.0/amd64/bsd.rd.hammer2. The stock ramdisk
-cannot mount HAMMER2. The (I)nstall workflow offers HAMMER2 root on a second
-disk. Use the first disk for FFS boot files and a separate disk of at least
-4 GiB for HAMMER2 ROOT. At first boot, answer the root prompt with the
-HAMMER2 disk's a partition (for example sd1a).
+cannot mount HAMMER2. The (I)nstall workflow offers HAMMER2 root on the same
+disk or a second disk. For one disk of at least 4 GiB, choose "same disk".
+The installer creates a 512 MiB FFS boot partition a, 128 MiB swap partition
+b, and HAMMER2 partition d. At first boot, enter that disk's d partition
+(for example sd0d) for root and b (sd0b) for swap. For two disks, choose
+"second disk"; the FFS boot disk is initialized normally, and HAMMER2 uses
+partition a of a separate disk of at least 4 GiB.
 See HAMMER2_ROOT_BOOT_PLAN.md in the source repository for the tested VM path.
 EOF
 

@@ -14,22 +14,29 @@ def replace(old, new):
 
 anchor = "\tfor _mp in $(bsort $FSENT); do\n"
 addition = '''\t# The standard layout created an FFS root on the boot disk. Move the
-\t# installed system to a separately labelled HAMMER2 disk when requested.
-\tif [[ $HAMMER2_INSTALL == yes ]]; then
-\t\twhile :; do
-\t\t\task_which "disk" "will hold the HAMMER2 root" \\
-\t\t\t    '$(rmel $ROOTDISK $(get_dkdevs))'
-\t\t\tHAMMER2_DISK=$resp
-\t\t\t[[ -n $HAMMER2_DISK && $HAMMER2_DISK != $ROOTDISK ]] && break
-\t\tdone
-\t\tmake_dev $HAMMER2_DISK
-\t\techo "Configure partition a as HAMMER2 on $HAMMER2_DISK."
-\t\tdisklabel -E $HAMMER2_DISK
-\t\tif ! disklabel $HAMMER2_DISK | grep -q '^  a: .*HAMMER2 '; then
-\t\t\techo "HAMMER2 partition a is required."
+\t# installed system to HAMMER2 while retaining FFS boot files.
+\tif [[ $HAMMER2_INSTALL != no ]]; then
+\t\tif [[ $HAMMER2_INSTALL == same ]]; then
+\t\t\tHAMMER2_DISK=$ROOTDISK
+\t\t\tHAMMER2_PART=d
+\t\telse
+\t\t\twhile :; do
+\t\t\t\task_which "disk" "will hold the HAMMER2 root" \\
+\t\t\t\t    '$(rmel $ROOTDISK $(get_dkdevs))'
+\t\t\t\tHAMMER2_DISK=$resp
+\t\t\t\t[[ -n $HAMMER2_DISK && $HAMMER2_DISK != $ROOTDISK ]] && break
+\t\t\tdone
+\t\t\tHAMMER2_PART=a
+\t\t\tmake_dev $HAMMER2_DISK
+\t\t\techo "Configure partition a as HAMMER2 on $HAMMER2_DISK."
+\t\t\tdisklabel -E $HAMMER2_DISK
+\t\tfi
+\t\tif ! disklabel $HAMMER2_DISK | grep -q "^  $HAMMER2_PART: .*HAMMER2 "; then
+\t\t\techo "HAMMER2 partition $HAMMER2_PART is required."
 \t\t\texit 1
 \t\tfi
-\t\tnewfs_hammer2 -s 3G -L ROOT /dev/r${HAMMER2_DISK}a || exit 1
+\t\tnewfs_hammer2 -s 3G -L ROOT \\
+\t\t    /dev/r${HAMMER2_DISK}${HAMMER2_PART} || exit 1
 \t\tfor _entry in $FSENT; do
 \t\t\tcase $_entry in /!*) HAMMER2_BOOTDEV=${_entry#*!};; esac
 \t\tdone
@@ -40,22 +47,51 @@ addition = '''\t# The standard layout created an FFS root on the boot disk. Move
 \t\t\t    HAMMER2_FSENT="$HAMMER2_FSENT $_entry"
 \t\tdone
 \t\tFSENT=$HAMMER2_FSENT
-\t\tROOTDEV=${HAMMER2_DISK}a
-\t\techo "/dev/${HAMMER2_DISK}a@ROOT / hammer2 rw 1 0" >>/tmp/i/fstab
+\t\tROOTDEV=${HAMMER2_DISK}${HAMMER2_PART}
+\t\techo "/dev/${ROOTDEV}@ROOT / hammer2 rw 1 0" >>/tmp/i/fstab
 \t\techo "$HAMMER2_BOOTDEV /bootfs ffs rw,nodev 1 2" >>/tmp/i/fstab
 \tfi
 
 '''
 replace(anchor, addition + anchor)
+replace("\t[[ $_disk != $ROOTDISK ]] && return\n\n\twhile $AI; do", '''\t[[ $_disk != $ROOTDISK ]] && return
+
+\tif [[ $HAMMER2_INSTALL == same ]]; then
+\t\tcat > /tmp/i/hammer2.layout <<EOF
+/ 512M 0%
+swap 128M 0%
+EOF
+\t\techo "Creating 512M FFS boot, 128M swap, and HAMMER2 root on $_disk."
+\t\tdisklabel -T /tmp/i/hammer2.layout -F $_f -w -A $_disk || return
+\t\tdisklabel -E $_disk <<EOF
+a d
+
+
+HAMMER2
+q
+y
+EOF
+\t\tdisklabel $_disk | grep -q '^  d: .*HAMMER2 ' || return
+\t\treturn
+\tfi
+
+\twhile $AI; do''')
 replace("\tget_rootinfo\n\n\tencrypt_root", '''\tget_rootinfo
 
 \tHAMMER2_INSTALL=no
 \tif ! $AI; then
-\t\task_yn "Install HAMMER2 root on a second disk?" no && HAMMER2_INSTALL=yes
+\t\twhile :; do
+\t\t\task "HAMMER2 root? (no, same disk, second disk)" no
+\t\t\tcase $resp in
+\t\t\t[nN]*) HAMMER2_INSTALL=no; break;;
+\t\t\t[sS][aA]*) HAMMER2_INSTALL=same; break;;
+\t\t\t[sS][eE]*) HAMMER2_INSTALL=second; break;;
+\t\t\tesac
+\t\tdone
 \tfi
 
 \tencrypt_root''')
-replace("\tmd_installboot $ROOTDISK\n\n\tchmod og-rwx", '''\tif [[ $HAMMER2_INSTALL == yes ]]; then
+replace("\tmd_installboot $ROOTDISK\n\n\tchmod og-rwx", '''\tif [[ $HAMMER2_INSTALL != no ]]; then
 \t\t# installboot reads /boot from the FFS root on the boot disk.
 \t\tmkdir -p /mnt/bootfs/etc
 \t\tcp /boot /mnt/bootfs/boot
@@ -68,7 +104,7 @@ replace("\tmd_installboot $ROOTDISK\n\n\tchmod og-rwx", '''\tif [[ $HAMMER2_INST
 \tfi
 
 \tchmod og-rwx''')
-replace("\tsha256 /mnt/bsd |", '''\tif [[ $HAMMER2_INSTALL == yes ]]; then
+replace("\tsha256 /mnt/bsd |", '''\tif [[ $HAMMER2_INSTALL != no ]]; then
 \t\tgzip -dc /bsd.hammer2.gz > /mnt/bootfs/bsd.hammer2 || exit 1
 \t\tchmod 700 /mnt/bootfs/bsd.hammer2
 \t\tcat > /mnt/bootfs/etc/boot.conf <<EOF
