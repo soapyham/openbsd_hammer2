@@ -45,7 +45,7 @@ install80.img: kernel ramdisk-kernel all
 		doas sh ./script/install80-img.sh "$@" "${INSTALL80_BASE}" "${KERNEL_BUILD_DIR}/bsd" "${RAMDISK_BUILD_DIR}/bsd"; \
 	fi
 
-install:
+install: all
 	@if [ "$$(id -u)" -eq 0 ]; then ksh -x ./script/install.sh; else doas ksh -x ./script/install.sh; fi
 uninstall:
 	@if [ "$$(id -u)" -eq 0 ]; then ksh -x ./script/uninstall.sh; else doas ksh -x ./script/uninstall.sh; fi
