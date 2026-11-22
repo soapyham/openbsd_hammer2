@@ -127,6 +127,13 @@ replace("\tsha256 /mnt/bsd |", '''\tif [[ $HAMMER2_INSTALL != no ]]; then
 \t\tcat > /mnt/bootfs/etc/boot.conf <<EOF
 boot /bsd.hammer2
 EOF
+\t\tif [[ -f /etc/hammer2-serial-console ]]; then
+\t\t\tcat > /mnt/bootfs/etc/boot.conf <<EOF
+stty com0 115200
+set tty com0
+boot /bsd.hammer2
+EOF
+\t\tfi
 \tfi
 
 \tsha256 /mnt/bsd |''')

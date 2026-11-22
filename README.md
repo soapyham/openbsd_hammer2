@@ -23,6 +23,27 @@ The result is `install80.img` in this directory. The build downloads the officia
 
     make INSTALL80_BASE=/path/to/original/install80.img install80.img
 
+For a serial console on `com0` at 115200 baud, build the image with
+`SERIAL_CONSOLE=com0`:
+
+    make SERIAL_CONSOLE=com0 install80.img
+
+Set your terminal to 115200, 8 data bits, no parity, and 1 stop bit. The
+installer will use the serial console, and HAMMER2 installs made from that
+image will retain the same setting. Re-run the build command to change the
+console setting on an existing image.
+
+On an existing HAMMER2 installation, put these lines in
+`/bootfs/etc/boot.conf` (keep any other boot commands you need):
+
+    stty com0 115200
+    set tty com0
+    boot /bsd.hammer2
+
+If the boot filesystem is mounted elsewhere, use its `etc/boot.conf` instead.
+The serial console switch takes effect on the next boot. A serial BREAK then
+enters `ddb` when `ddb.console=1`.
+
 ## Install on a machine
 
 Write `install80.img` to a USB drive. Replace `sdX` with the USB drive's device name. This erases the drive.

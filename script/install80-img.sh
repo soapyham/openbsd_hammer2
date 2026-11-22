@@ -3,17 +3,19 @@
 set -eu
 
 usage() {
-	echo "usage: $0 output.img [base-install80.img] [hammer2-kernel] [ramdisk-kernel]" >&2
+	echo "usage: $0 output.img [base-install80.img] [hammer2-kernel] [ramdisk-kernel] [serial-console: no|com0]" >&2
 	exit 1
 }
 
-[ "$#" -ge 1 ] && [ "$#" -le 4 ] || usage
+[ "$#" -ge 1 ] && [ "$#" -le 5 ] || usage
 [ "$(id -u)" -eq 0 ] || { echo 'image assembly requires root' >&2; exit 1; }
 
 output=$1
 base=${2:-}
 kernel=${3:-.obj/kernel/amd64.MP/bsd}
 ramdisk_kernel=${4:-.obj/kernel/amd64.RAMDISK.HAMMER2/bsd}
+serial_console=${5:-no}
+case "$serial_console" in no|com0) ;; *) usage ;; esac
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 case "$output" in /*) ;; *) output="$(pwd)/$output" ;; esac
 case "$kernel" in /*) ;; *) kernel="$(pwd)/$kernel" ;; esac
@@ -103,6 +105,9 @@ mount -r "/dev/${rdvnd}a" "$work/stock-mr"
 rdmounted=yes
 (cd "$work/stock-mr" && pax -rw -pe . "$work/custom-mr")
 python3 "$repo/script/enable-hammer2-install.py" "$work/custom-mr/install.sub"
+if [ "$serial_console" = com0 ]; then
+	: > "$work/custom-mr/etc/hammer2-serial-console"
+fi
 gzip -9cn "$kernel" > "$work/custom-mr/bsd.hammer2.gz"
 cp "$work/src/boot" "$work/custom-mr/boot"
 umount "$work/stock-mr"
@@ -195,6 +200,12 @@ cp /etc/ttys "$work/dst/etc/ttys"
 cat > "$work/dst/etc/boot.conf" <<'EOF'
 set image /bsd.rd
 EOF
+if [ "$serial_console" = com0 ]; then
+	cat >> "$work/dst/etc/boot.conf" <<'EOF'
+stty com0 115200
+set tty com0
+EOF
+fi
 cat > "$payload/hammer2-tools/README" <<'EOF'
 HAMMER2 tools for OpenBSD 8.0 amd64
 

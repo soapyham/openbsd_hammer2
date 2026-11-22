@@ -4,6 +4,7 @@ KERNEL_CONFIG ?= ${KERNEL_SRC_DIR}/arch/${MACHINE}/conf/GENERIC.MP
 KERNEL_BUILD_DIR ?= ${.CURDIR}/.obj/kernel/${MACHINE}.MP
 RAMDISK_BUILD_DIR ?= ${.CURDIR}/.obj/kernel/${MACHINE}.RAMDISK.HAMMER2
 INSTALL80_BASE ?=
+SERIAL_CONSOLE ?= no
 
 .PHONY: all clean kernel ramdisk-kernel install-kernel fetch-src $(SUBDIRS)
 
@@ -40,9 +41,9 @@ install-kernel: kernel
 # Set INSTALL80_BASE to an existing OpenBSD 8.0 amd64 image to skip the download.
 install80.img: kernel ramdisk-kernel all
 	@if [ "$$(id -u)" -eq 0 ]; then \
-		sh ./script/install80-img.sh "$@" "${INSTALL80_BASE}" "${KERNEL_BUILD_DIR}/bsd" "${RAMDISK_BUILD_DIR}/bsd"; \
+		sh ./script/install80-img.sh "$@" "${INSTALL80_BASE}" "${KERNEL_BUILD_DIR}/bsd" "${RAMDISK_BUILD_DIR}/bsd" "${SERIAL_CONSOLE}"; \
 	else \
-		doas sh ./script/install80-img.sh "$@" "${INSTALL80_BASE}" "${KERNEL_BUILD_DIR}/bsd" "${RAMDISK_BUILD_DIR}/bsd"; \
+		doas sh ./script/install80-img.sh "$@" "${INSTALL80_BASE}" "${KERNEL_BUILD_DIR}/bsd" "${RAMDISK_BUILD_DIR}/bsd" "${SERIAL_CONSOLE}"; \
 	fi
 
 install: all
