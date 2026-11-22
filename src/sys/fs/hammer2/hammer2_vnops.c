@@ -100,14 +100,16 @@ hammer2_inactive(void *v)
 	hammer2_inode_lock(ip, 0);
 	if (ip->flags & HAMMER2_INODE_ISUNLINKED) {
 		/*
-		 * If the inode has been unlinked we can throw away all
-		 * buffers (dirty or not) and clean the file out.
+		 * If the inode has been unlinked, mark it for on-media
+		 * deletion and recycle its vnode.
 		 *
 		 * Because vrecycle() calls are not guaranteed, try to
 		 * dispose of the inode as much as possible right here.
 		 */
-		uvm_vnp_setsize(vp, 0);
-		uvm_vnp_uncache(vp);
+		/*
+		 * INACTIVE runs with v_usecount == 0.  VM cleanup belongs
+		 * to vclean(); uvm_vnp_uncache() can call vref() and panic.
+		 */
 
 		/* Delete the file on-media. */
 		if ((ip->flags & HAMMER2_INODE_DELETING) == 0) {
