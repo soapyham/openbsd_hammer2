@@ -130,6 +130,26 @@ EOF
 \tfi
 
 \tsha256 /mnt/bsd |''')
+replace("\tinstall_sets\n\n\t_mp=$(df /mnt/usr/local", '''\tif [[ $HAMMER2_INSTALL != no ]]; then
+\t\tALLSETS="$ALLSETS h2relink$VERSION.tgz"
+\t\tDEFAULTSETS="$DEFAULTSETS h2relink$VERSION.tgz"
+\tfi
+\tinstall_sets
+
+\t_mp=$(df /mnt/usr/local''')
+replace("\tif [[ -f $_kernel_dir.tgz ]]; then", '''\tif [[ $HAMMER2_INSTALL != no ]]; then
+\t\t[[ -f /mnt/etc/hammer2-relink-kernel ]] ||
+\t\t    err_exit "HAMMER2 relink set is missing; install sets from HAMMER2 media."
+\t\tread -r HAMMER2_RELINK_KERNEL </mnt/etc/hammer2-relink-kernel
+\t\t[[ -f $_kernel_dir/$HAMMER2_RELINK_KERNEL/Makefile &&
+\t\t    -x /mnt/usr/libexec/reorder_kernel ]] ||
+\t\t    err_exit "HAMMER2 relink set is missing; install sets from HAMMER2 media."
+\t\tsha256 /mnt/bootfs/bsd.hammer2 |
+\t\t    (umask 077; sed 's,/mnt,,' > /mnt/var/db/kernel.hammer2.SHA256)
+\t\trm -f $_kernel_dir.tgz
+\tfi
+
+\tif [[ $HAMMER2_INSTALL == no && -f $_kernel_dir.tgz ]]; then''')
 replace("\t\t_msg=$(mount -v -t $_fstype $_async -o $_opt $_dev $_mp) ||", '''\t\t_mountopt=$_async
 \t\t[[ $_fstype == hammer2 ]] && _mountopt=
 \t\t_msg=$(mount -v -t $_fstype $_mountopt -o $_opt $_dev $_mp) ||''')

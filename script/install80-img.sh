@@ -50,6 +50,8 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 mkdir "$work/src" "$work/dst"
+sh "$repo/script/build-hammer2-relink-set.sh" \
+    "$(dirname "$kernel")" "$work/h2relink80.tgz" "$work"
 
 if [ -z "$base" ]; then
 	base="$work/install80.img"
@@ -63,11 +65,13 @@ fi
 case "$base" in /*) ;; *) base="$(pwd)/$base" ;; esac
 [ "$base" != "$output" ] || { echo 'base and output must differ' >&2; exit 1; }
 
-# The release image is full. Recreate its partition layout with 128 MiB more
-# space, preserving the signed release sets and the original EFI filesystem.
+# The release image is full. Leave space for the custom relink set and 128 MiB
+# of filesystem headroom, preserving the release sets and EFI filesystem.
 size=$(stat -f %z "$base")
 [ "$size" -gt 800000000 ] || { echo 'base image is unexpectedly small' >&2; exit 1; }
-total=$((size / 512 + 128 * 2048))
+relink_bytes=$(stat -f %z "$work/h2relink80.tgz")
+relink_mib=$(((relink_bytes + 1048575) / 1048576))
+total=$((size / 512 + (128 + relink_mib) * 2048))
 fssize=$((total - 960))
 dd if=/dev/zero of="$work/output.img" bs=512 count=1 seek=$((total - 1))
 srcvnd=$(vnconfig -v "$base" | tail -1)
@@ -87,6 +91,7 @@ dstmounted=yes
 
 payload="$work/dst/8.0/amd64"
 mkdir -p "$payload/hammer2-tools"
+install -m 444 "$work/h2relink80.tgz" "$payload/h2relink80.tgz"
 
 # Expand the release installer ramdisk and add HAMMER2 support without
 # rebuilding OpenBSD's crunched installer binary.
@@ -202,6 +207,11 @@ At the shell, use disklabel to assign HAMMER2 to the intended partition,
 then run newfs_hammer2 on its raw device. The four HAMMER2 utilities are in
 /sbin and also in 8.0/amd64/hammer2-tools. The same kernel is copied to
 8.0/amd64/bsd.hammer2 for installation on an FFS boot partition.
+The h2relink80.tgz set contains the matching kernel link objects and the
+HAMMER2 reorder_kernel script. Choose this image's disk as the set source;
+the HAMMER2 installer selects that set by default. On the installed system,
+the kernel is relinked on /bootfs and its log is under
+/usr/share/relink/kernel/amd64.MP/relink.log.
 The ramdisk root is writable; mount points can be created under /mnt.
 When using the full kernel single-user shell, remount the image writable
 with "mount -u -o rw /dev/sd0a /" (adjust the device if needed).
