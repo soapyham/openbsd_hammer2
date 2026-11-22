@@ -2,6 +2,9 @@
 
 **Warning:** This is experimental code and is not intended for normal use. Do not use it for data you need to keep.
 
+**Known Issues:**
+The system still randomly locks up
+
 ## Build and install
 
 Build on OpenBSD 8.0 amd64. From this repository, run:
