@@ -29,4 +29,4 @@ Write `install80.img` to a USB drive. Replace `sdX` with the USB drive's device 
 
     doas dd if=install80.img of=/dev/rsdXc bs=1m
 
-Boot the machine from the USB drive and choose `I` for Install. Select the target disk, then choose HAMMER2 when asked for the root filesystem. The installer can put HAMMER2 and the FFS boot partition on one disk, or put HAMMER2 on a second disk.
+Boot the machine from the USB drive and choose `I` for Install. Select the target disk, then choose HAMMER2 when asked for the root filesystem. The installer can put HAMMER2 and the FFS boot partition on one disk, or put HAMMER2 on a second disk. For a same-disk install, enter the swap size in MiB (128 by default); enter 0 to disable swap and give the remaining space to HAMMER2.

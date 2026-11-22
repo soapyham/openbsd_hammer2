@@ -57,11 +57,22 @@ replace(anchor, addition + anchor)
 replace("\t[[ $_disk != $ROOTDISK ]] && return\n\n\twhile $AI; do", '''\t[[ $_disk != $ROOTDISK ]] && return
 
 \tif [[ $HAMMER2_INSTALL == same ]]; then
+\t\twhile :; do
+\t\t\task "Swap size in MiB (0 disables swap)" 128
+\t\t\tcase $resp in
+\t\t\t0|[1-9]*([0-9])) HAMMER2_SWAP_MIB=$resp; break;;
+\t\t\tesac
+\t\t\techo "Enter a non-negative whole number of MiB."
+\t\tdone
 \t\tcat > /tmp/i/hammer2.layout <<EOF
 / 512M 0%
-swap 128M 0%
 EOF
-\t\techo "Creating 512M FFS boot, 128M swap, and HAMMER2 root on $_disk."
+\t\tif (( HAMMER2_SWAP_MIB > 0 )); then
+\t\t\techo "swap ${HAMMER2_SWAP_MIB}M 0%" >>/tmp/i/hammer2.layout
+\t\t\techo "Creating 512M FFS boot, ${HAMMER2_SWAP_MIB}M swap, and HAMMER2 root on $_disk."
+\t\telse
+\t\t\techo "Creating 512M FFS boot and HAMMER2 root without swap on $_disk."
+\t\tfi
 \t\tdisklabel -T /tmp/i/hammer2.layout -F $_f -w -A $_disk || return
 \t\tdisklabel -E $_disk <<EOF
 a d

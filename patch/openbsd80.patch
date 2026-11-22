@@ -189,7 +189,7 @@ diff --git a/sys/kern/subr_disk.c b/sys/kern/subr_disk.c
  
  		if (bootdv->dv_class == DV_DISK) {
  			if (!duid_iszero(rootduid)) {
-@@ -1600,8 +1649,21 @@
+@@ -1600,8 +1649,27 @@
  			 * Root and swap are on the disk.
  			 * Assume swap is on partition b.
  			 */
@@ -200,8 +200,14 @@ diff --git a/sys/kern/subr_disk.c b/sys/kern/subr_disk.c
 +				rootdev = MAKEDISKDEV(majdev,
 +				    rootdv->dv_unit, h2part);
 +				majdev = findblkmajor(bootdv);
-+				nswapdev = MAKEDISKDEV(majdev,
-+				    bootdv->dv_unit, 1);
++				if (h2bootdk != NULL &&
++				    h2bootdk->dk_label != NULL &&
++				    h2bootdk->dk_label->d_npartitions > 1 &&
++				    h2bootdk->dk_label->d_partitions[1].p_fstype ==
++				    FS_SWAP &&
++				    DL_GETPSIZE(&h2bootdk->dk_label->d_partitions[1]) != 0)
++					nswapdev = MAKEDISKDEV(majdev,
++					    bootdv->dv_unit, 1);
 +			} else
 +#endif
 +			{
